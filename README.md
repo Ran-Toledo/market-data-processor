@@ -1,3 +1,1 @@
-### Market Data Processor
-
-A multithreaded C++ market-data pipeline for simulating low-latency ingestion, concurrent processing, and performance measurement under bursty workloads.
+A multithreaded C++ market-data pipeline with pluggable synthetic and replay-based input sources, bounded queueing, concurrent event processing, and latency/throughput instrumentation to evaluate performance under bursty workloads.
