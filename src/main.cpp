@@ -1,15 +1,33 @@
 #include "core/MarketDataEvent.h"
-#include "pipeline/Producer.h"
-#include "pipeline/Worker.h"
-#include "processing/EventProcessor.h"
-#include "processing/SymbolStateStore.h"
-#include "queue/BoundedConcurrentQueue.h"
 #include "source/SyntheticMarketDataSource.h"
 
-#include <thread>
+#include <iostream>
 #include <vector>
 
 int main()
 {
+    std::vector<mdp::Symbol> symbols
+    {
+        "AAPL",
+        "MSFT",
+        "GOOG"
+    };
+
+    mdp::SyntheticMarketDataSource source(symbols, 10000);
+
+    mdp::MarketDataEvent event{};
+
+    while (source.next(event))
+    {
+        std::cout
+            << "symbol=" << event.symbol
+            << ", price=" << event.price
+            << ", volume=" << event.volume
+            << ", exchangeTs=" << event.exchangeTimestampNs
+            << ", ingestTs=" << event.ingestTimestampNs
+            << ", seq=" << event.sequenceNumber
+            << '\n';
+    }
+
     return 0;
 }

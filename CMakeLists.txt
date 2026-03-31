@@ -7,23 +7,53 @@ project(
     LANGUAGES CXX
 )
 
+# C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(MSVC)
-    add_compile_options(/W4 /permissive-)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
-add_executable(market_data_processor
-    src/main.cpp
+# Collect all source files
+file(GLOB_RECURSE MDP_SOURCE_FILES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
+# Collect all header files
+file(GLOB_RECURSE MDP_HEADER_FILES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+)
+
+# Create executable
+add_executable(market_data_processor
+    ${MDP_SOURCE_FILES}
+    ${MDP_HEADER_FILES}
+)
+
+# Include directories
 target_include_directories(market_data_processor
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-target_compile_features(market_data_processor PRIVATE cxx_std_17)
+# Compiler warnings
+if(MSVC)
+    target_compile_options(market_data_processor PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(market_data_processor PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# Group source files under "src"
+source_group(
+    TREE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PREFIX "src"
+    FILES ${MDP_SOURCE_FILES}
+)
+
+# Group headers under "include"
+source_group(
+    TREE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PREFIX "include"
+    FILES ${MDP_HEADER_FILES}
+)
