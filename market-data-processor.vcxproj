@@ -129,11 +129,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\processing\EventProcessor.cpp" />
     <ClCompile Include="src\source\SyntheticMarketDataSource.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\core\AppConfig.h" />
     <ClInclude Include="include\core\MarketDataEvent.h" />
+    <ClInclude Include="include\core\ThreadSafeQueue.h" />
     <ClInclude Include="include\core\Types.h" />
     <ClInclude Include="include\metrics\LatencyRecorder.h" />
     <ClInclude Include="include\metrics\MetricsCollector.h" />

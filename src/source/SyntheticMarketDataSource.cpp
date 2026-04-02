@@ -1,81 +1,85 @@
+// SyntheticMarketDataSource.cpp
 #include "source/SyntheticMarketDataSource.h"
 
-#include <algorithm>
+#include "core/AppConfig.h"
+
 #include <chrono>
-#include <stdexcept>
-#include <utility>
+#include <random>
+#include <thread>
 
 namespace mdp
 {
-    SyntheticMarketDataSource::SyntheticMarketDataSource(
-        std::vector<Symbol> symbols,
-        std::size_t maxMessages,
-        std::uint32_t seed)
-        : m_symbols(std::move(symbols))
-        , m_maxMessages(maxMessages)
-        , m_rng(seed)
-        , m_volumeDistribution(100U, 1000U)
-        , m_priceDeltaDistribution(-1.0, 1.0)
+    namespace
     {
-        if (m_symbols.empty())
+        TimestampNs getCurrentTimestampNs()
         {
-            throw std::invalid_argument("SyntheticMarketDataSource requires at least one symbol");
-        }
-
-        for (const Symbol& symbol : m_symbols)
-        {
-            m_lastPrices.emplace(symbol, 100.0);
+            return static_cast<TimestampNs>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
         }
     }
 
-    bool SyntheticMarketDataSource::next(MarketDataEvent& outEvent)
+    SyntheticMarketDataSource::SyntheticMarketDataSource(ThreadSafeQueue<MarketDataEvent>& queue)
+        : m_queue(queue),
+        m_symbols{ "AAPL", "MSFT", "GOOG", "AMZN", "NVDA" }
     {
-        if (m_generatedMessages >= m_maxMessages)
+    }
+
+    SyntheticMarketDataSource::~SyntheticMarketDataSource()
+    {
+        stop();
+    }
+
+    void SyntheticMarketDataSource::start()
+    {
+        if (m_running)
         {
-            return false;
+            return;
         }
 
-        const Symbol symbol = nextSymbol();
-        const double price = nextPrice(symbol);
-        const std::uint32_t volume = nextVolume();
-        const TimestampNs exchangeTimestampNs = nextExchangeTimestamp();
-
-        outEvent.symbol = symbol;
-        outEvent.price = price;
-        outEvent.volume = volume;
-        outEvent.exchangeTimestampNs = exchangeTimestampNs;
-        outEvent.ingestTimestampNs = 0;
-        outEvent.sequenceNumber = m_nextSequenceNumber;
-
-        ++m_generatedMessages;
-        ++m_nextSequenceNumber;
-
-        return true;
+        m_running = true;
+        m_workerThread = std::thread(&SyntheticMarketDataSource::generateLoop, this);
     }
 
-    Symbol SyntheticMarketDataSource::nextSymbol()
+    void SyntheticMarketDataSource::stop()
     {
-        const Symbol symbol = m_symbols[m_symbolIndex];
-        m_symbolIndex = (m_symbolIndex + 1) % m_symbols.size();
-        return symbol;
+        if (!m_running)
+        {
+            return;
+        }
+
+        m_running = false;
+
+        if (m_workerThread.joinable())
+        {
+            m_workerThread.join();
+        }
     }
 
-    double SyntheticMarketDataSource::nextPrice(const Symbol& symbol)
+    void SyntheticMarketDataSource::generateLoop()
     {
-        double& lastPrice = m_lastPrices.at(symbol);
-        lastPrice = std::max(1.0, lastPrice + m_priceDeltaDistribution(m_rng));
-        return lastPrice;
+        while (m_running)
+        {
+            m_queue.push(generateEvent());
+            std::this_thread::sleep_for(std::chrono::milliseconds(config::sourceSleepMs));
+        }
     }
 
-    std::uint32_t SyntheticMarketDataSource::nextVolume()
+    MarketDataEvent SyntheticMarketDataSource::generateEvent()
     {
-        return m_volumeDistribution(m_rng);
-    }
+        static thread_local std::mt19937 rng(std::random_device{}());
+        static thread_local std::uniform_int_distribution<std::size_t> symbolIndexDist(0, 4);
+        static thread_local std::uniform_real_distribution<double> priceDist(100.0, 500.0);
+        static thread_local std::uniform_int_distribution<std::uint32_t> volumeDist(1, 1000);
 
-    TimestampNs SyntheticMarketDataSource::nextExchangeTimestamp() const
-    {
-        const auto now = std::chrono::steady_clock::now().time_since_epoch();
-        return static_cast<TimestampNs>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+        MarketDataEvent event;
+        event.symbol = m_symbols[symbolIndexDist(rng)];
+        event.price = priceDist(rng);
+        event.volume = volumeDist(rng);
+        event.exchangeTimestampNs = getCurrentTimestampNs();
+        event.ingestTimestampNs = getCurrentTimestampNs();
+        event.sequenceNumber = m_nextSequenceNumber++;
+
+        return event;
     }
 }

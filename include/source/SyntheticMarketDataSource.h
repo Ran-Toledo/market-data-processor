@@ -1,41 +1,33 @@
 // SyntheticMarketDataSource.h
 #pragma once
 
-#include "source/IMarketDataSource.h"
+#include "core/MarketDataEvent.h"
+#include "core/ThreadSafeQueue.h"
 
-#include <cstddef>
-#include <random>
-#include <unordered_map>
+#include <atomic>
+#include <thread>
 #include <vector>
 
 namespace mdp
 {
-    class SyntheticMarketDataSource : public IMarketDataSource
+    class SyntheticMarketDataSource
     {
     public:
-        SyntheticMarketDataSource(
-            std::vector<Symbol> symbols,
-            std::size_t maxMessages,
-            std::uint32_t seed = 42U);
+        explicit SyntheticMarketDataSource(ThreadSafeQueue<MarketDataEvent>& queue);
+        ~SyntheticMarketDataSource();
 
-        bool next(MarketDataEvent& outEvent) override;
-
-    private:
-        Symbol nextSymbol();
-        double nextPrice(const Symbol& symbol);
-        std::uint32_t nextVolume();
-        TimestampNs nextExchangeTimestamp() const;
+        void start();
+        void stop();
 
     private:
+        void generateLoop();
+        MarketDataEvent generateEvent();
+
+    private:
+        ThreadSafeQueue<MarketDataEvent>& m_queue;
+        std::thread m_workerThread;
+        std::atomic<bool> m_running = false;
+        SequenceNumber m_nextSequenceNumber = 1;
         std::vector<Symbol> m_symbols;
-        std::unordered_map<Symbol, double> m_lastPrices;
-        std::size_t m_maxMessages{ 0 };
-        std::size_t m_generatedMessages{ 0 };
-        std::size_t m_symbolIndex{ 0 };
-        SequenceNumber m_nextSequenceNumber{ 1 };
-
-        std::mt19937 m_rng;
-        std::uniform_int_distribution<std::uint32_t> m_volumeDistribution;
-        std::uniform_real_distribution<double> m_priceDeltaDistribution;
     };
 }
