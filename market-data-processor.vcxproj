@@ -129,6 +129,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\pipeline\Producer.cpp" />
     <ClCompile Include="src\processing\EventProcessor.cpp" />
     <ClCompile Include="src\source\SyntheticMarketDataSource.cpp" />
   </ItemGroup>

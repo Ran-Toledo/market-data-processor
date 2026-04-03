@@ -2,11 +2,12 @@
 #pragma once
 
 #include "core/MarketDataEvent.h"
-#include "queue/BoundedConcurrentQueue.h"
+#include "core/ThreadSafeQueue.h"
 #include "source/IMarketDataSource.h"
 
 #include <atomic>
 #include <cstddef>
+#include <thread>
 
 namespace mdp
 {
@@ -15,15 +16,22 @@ namespace mdp
     public:
         Producer(
             IMarketDataSource& source,
-            BoundedConcurrentQueue<MarketDataEvent>& queue);
+            ThreadSafeQueue<MarketDataEvent>& queue);
+        ~Producer();
 
-        void run();
+        void start();
+        void stop();
 
-        std::size_t producedCount() const;
+        std::size_t getProducedCount() const;
+
+    private:
+        void produceLoop();
 
     private:
         IMarketDataSource& m_source;
-        BoundedConcurrentQueue<MarketDataEvent>& m_queue;
-        std::atomic<std::size_t> m_producedCount{ 0 };
+        ThreadSafeQueue<MarketDataEvent>& m_queue;
+        std::thread m_workerThread;
+        std::atomic<bool> m_running = false;
+        std::atomic<std::size_t> m_producedCount = 0;
     };
 }

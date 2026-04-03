@@ -1,32 +1,23 @@
 // SyntheticMarketDataSource.h
 #pragma once
 
-#include "core/MarketDataEvent.h"
-#include "core/ThreadSafeQueue.h"
+#include "source/IMarketDataSource.h"
 
-#include <atomic>
-#include <thread>
 #include <vector>
 
 namespace mdp
 {
-    class SyntheticMarketDataSource
+    class SyntheticMarketDataSource : public IMarketDataSource
     {
     public:
-        explicit SyntheticMarketDataSource(ThreadSafeQueue<MarketDataEvent>& queue);
-        ~SyntheticMarketDataSource();
+        SyntheticMarketDataSource();
 
-        void start();
-        void stop();
+        bool next(MarketDataEvent& outEvent) override;
 
     private:
-        void generateLoop();
         MarketDataEvent generateEvent();
 
     private:
-        ThreadSafeQueue<MarketDataEvent>& m_queue;
-        std::thread m_workerThread;
-        std::atomic<bool> m_running = false;
         SequenceNumber m_nextSequenceNumber = 1;
         std::vector<Symbol> m_symbols;
     };
