@@ -21,8 +21,8 @@ file(GLOB_RECURSE MDP_SOURCE_FILES
 # Collect all header files
 file(GLOB_RECURSE MDP_HEADER_FILES
     CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
 # Create executable
@@ -33,8 +33,8 @@ add_executable(market_data_processor
 
 # Include directories
 target_include_directories(market_data_processor
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE 
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
 # Compiler warnings
@@ -47,13 +47,7 @@ endif()
 # Group source files under "src"
 source_group(
     TREE "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    PREFIX "src"
+    PREFIX "Project Files"
     FILES ${MDP_SOURCE_FILES}
-)
-
-# Group headers under "include"
-source_group(
-    TREE "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    PREFIX "include"
-    FILES ${MDP_HEADER_FILES}
+	FILES ${MDP_HEADER_FILES}
 )

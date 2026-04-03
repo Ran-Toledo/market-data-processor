@@ -1,20 +1,10 @@
 // SyntheticMarketDataSource.cpp
 #include "source/SyntheticMarketDataSource.h"
 #include "core/AppConfig.h"
+#include "util/Clock.h"
 
-#include <chrono>
 #include <random>
 #include <thread>
-
-namespace
-{
-    mdp::TimestampNs getCurrentTimestampNs()
-    {
-        return static_cast<mdp::TimestampNs>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count());
-    }
-}
 
 namespace mdp
 {
@@ -47,8 +37,10 @@ namespace mdp
         event.symbol = m_symbols[symbolIndexDistribution(generator)];
         event.price = priceDistribution(generator);
         event.volume = volumeDistribution(generator);
-        event.exchangeTimestampNs = getCurrentTimestampNs();
-        event.ingestTimestampNs = getCurrentTimestampNs();
+
+        const TimestampNs timestampNs = clock::nowNs();
+        event.exchangeTimestampNs = timestampNs;
+        event.ingestTimestampNs = timestampNs;
         event.sequenceNumber = m_nextSequenceNumber++;
 
         return event;

@@ -2,7 +2,7 @@
 #pragma once
 
 #include "core/MarketDataEvent.h"
-#include "core/ThreadSafeQueue.h"
+#include "queue/ThreadSafeQueue.h"
 #include "source/IMarketDataSource.h"
 
 #include <atomic>

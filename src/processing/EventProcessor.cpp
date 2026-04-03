@@ -1,57 +1,60 @@
 // EventProcessor.cpp
 #include "processing/EventProcessor.h"
 #include "core/AppConfig.h"
+#include "util/Clock.h"
 
-#include <chrono>
 #include <iostream>
 
 using namespace mdp::config;
 
-namespace
-{
-    mdp::TimestampNs getCurrentTimestampNs()
-    {
-        return static_cast<mdp::TimestampNs>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::steady_clock::now().time_since_epoch()).count());
-    }
-}
-
 namespace mdp
 {
-    EventProcessor::EventProcessor(ThreadSafeQueue<MarketDataEvent>& queue)
-        : m_queue(queue)
+    EventProcessor::EventProcessor(
+        SymbolStateStore& stateStore,
+        SymbolStats& symbolStats)
+        : m_stateStore(stateStore)
+        , m_symbolStats(symbolStats)
     {
     }
 
-    EventProcessor::~EventProcessor()
+    void EventProcessor::process(const MarketDataEvent& event)
     {
-        stop();
-    }
+        const TimestampNs nowNs = clock::nowNs();
+        const std::uint64_t latencyNs =
+            nowNs >= event.ingestTimestampNs ? nowNs - event.ingestTimestampNs : 0;
 
-    void EventProcessor::start()
-    {
-        if (m_running.load())
+        m_stateStore.update(event);
+        m_symbolStats.record(event);
+
+        const std::size_t processedCount = m_processedCount.fetch_add(1) + 1;
+        m_totalLatencyNs.fetch_add(latencyNs);
+
+        std::uint64_t currentMin = m_minLatencyNs.load();
+        while (latencyNs < currentMin &&
+            !m_minLatencyNs.compare_exchange_weak(currentMin, latencyNs))
         {
-            return;
         }
 
-        m_running = true;
-        m_workerThread = std::thread(&EventProcessor::processLoop, this);
-    }
-
-    void EventProcessor::stop()
-    {
-        if (!m_running.load())
+        std::uint64_t currentMax = m_maxLatencyNs.load();
+        while (latencyNs > currentMax &&
+            !m_maxLatencyNs.compare_exchange_weak(currentMax, latencyNs))
         {
-            return;
         }
 
-        m_running = false;
-
-        if (m_workerThread.joinable())
+        if (enableEventLogging)
         {
-            m_workerThread.join();
+            std::cout << "Processed event | " << event
+                << " | latency(ns): " << latencyNs << std::endl;
+        }
+
+        if (enableProcessingStatsLogging &&
+            (processedCount % processingStatsLogInterval == 0))
+        {
+            std::cout << "Processed events: " << processedCount
+                << " | avg latency(ns): " << getAverageLatencyNs()
+                << " | min latency(ns): " << getMinLatencyNs()
+                << " | max latency(ns): " << getMaxLatencyNs()
+                << std::endl;
         }
     }
 
@@ -87,48 +90,5 @@ namespace mdp
     std::uint64_t EventProcessor::getMaxLatencyNs() const
     {
         return m_maxLatencyNs.load();
-    }
-
-    void EventProcessor::processLoop()
-    {
-        MarketDataEvent event;
-
-        while (m_queue.pop(event))
-        {
-            const TimestampNs nowNs = getCurrentTimestampNs();
-            const std::uint64_t latencyNs =
-                nowNs >= event.ingestTimestampNs ? nowNs - event.ingestTimestampNs : 0;
-
-            const std::size_t processedCount = m_processedCount.fetch_add(1) + 1;
-            m_totalLatencyNs.fetch_add(latencyNs);
-
-            std::uint64_t currentMin = m_minLatencyNs.load();
-            while (latencyNs < currentMin &&
-                !m_minLatencyNs.compare_exchange_weak(currentMin, latencyNs))
-            {
-            }
-
-            std::uint64_t currentMax = m_maxLatencyNs.load();
-            while (latencyNs > currentMax &&
-                !m_maxLatencyNs.compare_exchange_weak(currentMax, latencyNs))
-            {
-            }
-
-            if (enableEventLogging)
-            {
-                std::cout << "Processed event | " << event
-                    << " | latency(ns): " << latencyNs << std::endl;
-            }
-
-            if (enableProcessingStatsLogging &&
-                (processedCount % processingStatsLogInterval == 0))
-            {
-                std::cout << "Processed events: " << processedCount
-                    << " | avg latency(ns): " << getAverageLatencyNs()
-                    << " | min latency(ns): " << getMinLatencyNs()
-                    << " | max latency(ns): " << getMaxLatencyNs()
-                    << std::endl;
-            }
-        }
     }
 }

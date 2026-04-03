@@ -1,9 +1,12 @@
 // main.cpp
 #include "core/AppConfig.h"
 #include "core/MarketDataEvent.h"
-#include "core/ThreadSafeQueue.h"
-#include "processing/EventProcessor.h"
 #include "pipeline/Producer.h"
+#include "pipeline/WorkerPool.h"
+#include "processing/EventProcessor.h"
+#include "processing/SymbolStateStore.h"
+#include "processing/SymbolStats.h"
+#include "queue/ThreadSafeQueue.h"
 #include "source/SyntheticMarketDataSource.h"
 
 #include <chrono>
@@ -14,28 +17,35 @@ int main()
 {
     mdp::config::enableEventLogging = false;
     mdp::config::enableProcessingStatsLogging = true;
-    mdp::config::processingStatsLogInterval = 100;
+    mdp::config::processingStatsLogInterval = 1000;
     mdp::config::sourceSleepMs = 1;
+    mdp::config::appRuntimeMs = 10;
+    mdp::config::numOfWorkers = 2;
 
     mdp::ThreadSafeQueue<mdp::MarketDataEvent> queue;
     mdp::SyntheticMarketDataSource source;
     mdp::Producer producer(source, queue);
-    mdp::EventProcessor processor(queue);
+
+    mdp::SymbolStateStore symbolStateStore;
+    mdp::SymbolStats symbolStats;
+    mdp::EventProcessor processor(symbolStateStore, symbolStats);
+
+    mdp::WorkerPool workerPool(queue, processor, mdp::config::numOfWorkers);
 
     std::cout << "Starting pipeline..." << std::endl;
 
-    processor.start();
+    workerPool.start();
     producer.start();
 
     const auto startTime = std::chrono::steady_clock::now();
 
-    std::this_thread::sleep_for(std::chrono::seconds(10));
+    std::this_thread::sleep_for(std::chrono::seconds(mdp::config::appRuntimeMs));
 
     std::cout << "Stopping pipeline..." << std::endl;
 
     producer.stop();
     queue.close();
-    processor.stop();
+    workerPool.stop();
 
     const auto endTime = std::chrono::steady_clock::now();
 
@@ -48,6 +58,10 @@ int main()
 
     std::cout << "Final produced count: " << producedCount << std::endl;
     std::cout << "Final processed count: " << processedCount << std::endl;
+    std::cout << "Tracked symbols in state store: "
+        << symbolStateStore.getTrackedSymbolCount() << std::endl;
+    std::cout << "Tracked symbols in stats: "
+        << symbolStats.getTrackedSymbolCount() << std::endl;
     std::cout << "Elapsed time: " << elapsedSeconds << " seconds" << std::endl;
     std::cout << "Average latency: " << processor.getAverageLatencyNs() << " ns" << std::endl;
     std::cout << "Min latency: " << processor.getMinLatencyNs() << " ns" << std::endl;

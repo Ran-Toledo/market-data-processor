@@ -63,6 +63,11 @@ namespace mdp
                 break;
             }
 
+            if (!m_running.load())
+            {
+                break;
+            }
+
             m_queue.push(event);
 
             const std::size_t producedCount = m_producedCount.fetch_add(1) + 1;
