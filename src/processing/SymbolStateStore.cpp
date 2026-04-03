@@ -28,6 +28,12 @@ namespace mdp
         return it->second;
     }
 
+    std::unordered_map<Symbol, SymbolState> SymbolStateStore::snapshot() const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_symbolStates;
+    }
+
     std::size_t SymbolStateStore::getTrackedSymbolCount() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);

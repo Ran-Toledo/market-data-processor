@@ -25,6 +25,8 @@ namespace mdp
 
         std::optional<SymbolState> tryGet(const Symbol& symbol) const;
 
+        std::unordered_map<Symbol, SymbolState> snapshot() const;
+
         std::size_t getTrackedSymbolCount() const;
 
     private:

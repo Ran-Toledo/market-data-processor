@@ -16,11 +16,11 @@
 int main()
 {
     mdp::config::enableEventLogging = false;
-    mdp::config::enableProcessingStatsLogging = true;
+    mdp::config::enableProcessingStatsLogging = false;
     mdp::config::processingStatsLogInterval = 1000;
-    mdp::config::sourceSleepMs = 1;
-    mdp::config::appRuntimeMs = 10;
-    mdp::config::numOfWorkers = 2;
+    mdp::config::sourceSleepMs = 0;
+    mdp::config::appRuntimeMs = 5;
+    mdp::config::numOfWorkers = 1;
 
     mdp::ThreadSafeQueue<mdp::MarketDataEvent> queue;
     mdp::SyntheticMarketDataSource source;
@@ -75,6 +75,32 @@ int main()
     else
     {
         std::cout << "Throughput: elapsed time too small to calculate." << std::endl;
+    }
+
+    const auto stateSnapshot = symbolStateStore.snapshot();
+    const auto statsSnapshot = symbolStats.snapshot();
+
+    std::cout << "\nSymbol summary:\n";
+
+    for (const auto& [symbol, state] : stateSnapshot)
+    {
+        std::cout << "Symbol: " << symbol << '\n';
+        std::cout << "  Last price: " << state.lastPrice << '\n';
+        std::cout << "  Last volume: " << state.lastVolume << '\n';
+        std::cout << "  Last sequence: " << state.lastSequenceNumber << '\n';
+
+        const auto statsIt = statsSnapshot.find(symbol);
+        if (statsIt != statsSnapshot.end())
+        {
+            const mdp::SymbolStatistics& stats = statsIt->second;
+            std::cout << "  Event count: " << stats.eventCount << '\n';
+            std::cout << "  Total volume: " << stats.totalVolume << '\n';
+            std::cout << "  Min price: " << stats.minPrice << '\n';
+            std::cout << "  Max price: " << stats.maxPrice << '\n';
+            std::cout << "  Avg price: " << stats.averagePrice << '\n';
+        }
+
+        std::cout << '\n';
     }
 
     return 0;
