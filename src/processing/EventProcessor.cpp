@@ -11,9 +11,7 @@ using namespace mdp::validation;
 
 namespace mdp
 {
-    EventProcessor::EventProcessor(
-        SymbolStateStore& stateStore,
-        SymbolStats& symbolStats)
+    EventProcessor::EventProcessor(SymbolStateStore& stateStore, SymbolStats& symbolStats)
         : m_stateStore(stateStore)
         , m_symbolStats(symbolStats)
     {
@@ -21,181 +19,76 @@ namespace mdp
 
     void EventProcessor::process(const MarketDataEvent& event)
     {
-        const ValidationResult validationResult = validation::validate(event);
+        const ValidationResult validationResult = validate(event);
         if (!validationResult.isValid)
         {
-            m_invalidCount.fetch_add(1);
-
-            if (enableEventLogging)
-            {
-                std::cout << "Rejected invalid event | " << event << std::endl;
-            }
-
+            m_metrics.onInvalid();
             return;
         }
 
-        m_validCount.fetch_add(1);
+        m_metrics.onValid();
 
-        const SequenceStatus sequenceStatus =
+        const auto seqStatus =
             m_sequenceTracker.evaluate(event.symbol, event.sequenceNumber);
 
-        if (sequenceStatus == SequenceStatus::Duplicate)
+        if (seqStatus == SequenceStatus::Duplicate)
         {
-            m_duplicateCount.fetch_add(1);
-
-            if (enableEventLogging)
-            {
-                std::cout << "Dropped duplicate event | " << event << std::endl;
-            }
-
+            m_metrics.onDuplicate();
             return;
         }
 
-        if (sequenceStatus == SequenceStatus::OutOfOrder)
+        if (seqStatus == SequenceStatus::OutOfOrder)
         {
-            m_outOfOrderCount.fetch_add(1);
-
-            if (enableEventLogging)
-            {
-                std::cout << "Dropped out-of-order event | " << event << std::endl;
-            }
-
+            m_metrics.onOutOfOrder();
             return;
         }
 
-        const std::optional<SymbolState> previousState = m_stateStore.tryGet(event.symbol);
-        const std::vector<RuleAlert> alerts = m_riskRuleEvaluator.evaluate(event, previousState);
+        const auto prev = m_stateStore.tryGet(event.symbol);
+        const auto alerts = m_riskRuleEvaluator.evaluate(event, prev);
 
         m_stateStore.update(event);
         m_symbolStats.record(event);
 
-        const TimestampNs nowNs = clock::nowNs();
-        const std::uint64_t latencyNs =
-            nowNs >= event.ingestTimestampNs ? nowNs - event.ingestTimestampNs : 0;
+        const auto now = clock::nowNs();
+        const auto latency =
+            now >= event.ingestTimestampNs ? now - event.ingestTimestampNs : 0;
 
-        const std::uint64_t processedCount = m_processedCount.fetch_add(1) + 1;
-
-        updateLatencyMetrics(latencyNs);
+        m_latency.record(latency);
 
         if (!alerts.empty())
         {
-            m_alertCount.fetch_add(static_cast<std::uint64_t>(alerts.size()));
+            m_metrics.onAlerts(alerts.size());
             logAlerts(alerts);
         }
 
-        if (enableEventLogging)
-        {
-            std::cout << "Processed event | " << event
-                << " | latency(ns): " << latencyNs << std::endl;
-        }
-
-        if (enableProcessingStatsLogging &&
-            processingStatsLogInterval > 0 &&
-            (processedCount % processingStatsLogInterval == 0))
-        {
-            std::cout << "Processed events: " << processedCount
-                << " | valid: " << getValidCount()
-                << " | invalid: " << getInvalidCount()
-                << " | duplicates: " << getDuplicateCount()
-                << " | out-of-order: " << getOutOfOrderCount()
-                << " | alerts: " << getAlertCount()
-                << " | avg latency(ns): " << getAverageLatencyNs()
-                << " | min latency(ns): " << getMinLatencyNs()
-                << " | max latency(ns): " << getMaxLatencyNs()
-                << std::endl;
-        }
-    }
-
-    void EventProcessor::updateLatencyMetrics(std::uint64_t latencyNs)
-    {
-        m_totalLatencyNs.fetch_add(latencyNs);
-
-        std::uint64_t currentMin = m_minLatencyNs.load();
-        while (latencyNs < currentMin &&
-            !m_minLatencyNs.compare_exchange_weak(currentMin, latencyNs))
-        {
-        }
-
-        std::uint64_t currentMax = m_maxLatencyNs.load();
-        while (latencyNs > currentMax &&
-            !m_maxLatencyNs.compare_exchange_weak(currentMax, latencyNs))
-        {
-        }
+        m_metrics.onProcessed();
     }
 
     void EventProcessor::logAlerts(const std::vector<RuleAlert>& alerts) const
     {
-        for (const RuleAlert& alert : alerts)
+        if (enableAlertLogging)
         {
-            std::cout << "Rule alert | symbol: " << alert.symbol
-                << " | type: ";
-
-            switch (alert.type)
+            for (const RuleAlert& alert : alerts)
             {
-            case RuleType::PriceJump:
-                std::cout << "PriceJump";
-                break;
-            case RuleType::LargeVolume:
-                std::cout << "LargeVolume";
-                break;
-            default:
-                std::cout << "Unknown";
-                break;
+                std::cout << "Rule alert | symbol: " << alert.symbol
+                    << " | type: ";
+
+                switch (alert.type)
+                {
+                case RuleType::PriceJump:
+                    std::cout << "PriceJump";
+                    break;
+                case RuleType::LargeVolume:
+                    std::cout << "LargeVolume";
+                    break;
+                default:
+                    std::cout << "Unknown";
+                    break;
+                }
+
+                std::cout << " | message: " << alert.message << std::endl;
             }
-
-            std::cout << " | message: " << alert.message << std::endl;
         }
-    }
-
-    std::uint64_t EventProcessor::getProcessedCount() const
-    {
-        return m_processedCount.load();
-    }
-
-    std::uint64_t EventProcessor::getValidCount() const
-    {
-        return m_validCount.load();
-    }
-
-    std::uint64_t EventProcessor::getInvalidCount() const
-    {
-        return m_invalidCount.load();
-    }
-
-    std::uint64_t EventProcessor::getDuplicateCount() const
-    {
-        return m_duplicateCount.load();
-    }
-
-    std::uint64_t EventProcessor::getOutOfOrderCount() const
-    {
-        return m_outOfOrderCount.load();
-    }
-
-    std::uint64_t EventProcessor::getAlertCount() const
-    {
-        return m_alertCount.load();
-    }
-
-    std::uint64_t EventProcessor::getAverageLatencyNs() const
-    {
-        const std::uint64_t processedCount = m_processedCount.load();
-        if (processedCount == 0)
-        {
-            return 0;
-        }
-
-        return m_totalLatencyNs.load() / processedCount;
-    }
-
-    std::uint64_t EventProcessor::getMinLatencyNs() const
-    {
-        const std::uint64_t minLatencyNs = m_minLatencyNs.load();
-        return minLatencyNs == UINT64_MAX ? 0 : minLatencyNs;
-    }
-
-    std::uint64_t EventProcessor::getMaxLatencyNs() const
-    {
-        return m_maxLatencyNs.load();
     }
 }
+

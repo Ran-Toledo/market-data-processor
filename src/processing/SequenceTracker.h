@@ -2,7 +2,6 @@
 
 #include "core/Types.h"
 
-#include <mutex>
 #include <unordered_map>
 
 namespace mdp
@@ -22,7 +21,6 @@ namespace mdp
         std::size_t getTrackedSymbolCount() const;
 
     private:
-        mutable std::mutex m_mutex;
         std::unordered_map<Symbol, SequenceNumber> m_lastSequenceBySymbol;
     };
 }

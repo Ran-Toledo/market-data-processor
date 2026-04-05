@@ -39,4 +39,3 @@ namespace mdp
         return m_symbolStates.size();
     }
 }
-

@@ -1,12 +1,10 @@
-// Producer.h
 #pragma once
 
 #include "core/MarketDataEvent.h"
-#include "queue/ThreadSafeQueue.h"
+#include "pipeline/WorkerPool.h"
 #include "source/IMarketDataSource.h"
 
 #include <atomic>
-#include <cstddef>
 #include <thread>
 
 namespace mdp
@@ -14,9 +12,7 @@ namespace mdp
     class Producer
     {
     public:
-        Producer(
-            IMarketDataSource& source,
-            ThreadSafeQueue<MarketDataEvent>& queue);
+        Producer(IMarketDataSource& source, WorkerPool& workerPool);
         ~Producer();
 
         void start();
@@ -29,9 +25,10 @@ namespace mdp
 
     private:
         IMarketDataSource& m_source;
-        ThreadSafeQueue<MarketDataEvent>& m_queue;
+        WorkerPool& m_workerPool;
+
         std::thread m_workerThread;
-        std::atomic<bool> m_running = false;
-        std::atomic<std::size_t> m_producedCount = 0;
+        std::atomic<bool> m_running{ false };
+        std::atomic<std::size_t> m_producedCount{ 0 };
     };
 }

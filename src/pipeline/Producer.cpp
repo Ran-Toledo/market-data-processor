@@ -1,4 +1,3 @@
-// Producer.cpp
 #include "pipeline/Producer.h"
 #include "core/AppConfig.h"
 
@@ -8,11 +7,9 @@ using namespace mdp::config;
 
 namespace mdp
 {
-    Producer::Producer(
-        IMarketDataSource& source,
-        ThreadSafeQueue<MarketDataEvent>& queue)
+    Producer::Producer(IMarketDataSource& source, WorkerPool& workerPool)
         : m_source(source)
-        , m_queue(queue)
+        , m_workerPool(workerPool)
     {
     }
 
@@ -23,23 +20,20 @@ namespace mdp
 
     void Producer::start()
     {
-        if (m_running.load())
+        if (m_running.exchange(true))
         {
             return;
         }
 
-        m_running = true;
         m_workerThread = std::thread(&Producer::produceLoop, this);
     }
 
     void Producer::stop()
     {
-        if (!m_running.load())
+        if (!m_running.exchange(false))
         {
             return;
         }
-
-        m_running = false;
 
         if (m_workerThread.joinable())
         {
@@ -68,9 +62,10 @@ namespace mdp
                 break;
             }
 
-            m_queue.push(event);
+            m_workerPool.submit(event);
 
-            const std::size_t producedCount = m_producedCount.fetch_add(1) + 1;
+            const std::size_t producedCount =
+                m_producedCount.fetch_add(1) + 1;
 
             if (enableEventLogging)
             {
@@ -78,6 +73,7 @@ namespace mdp
             }
 
             if (enableProcessingStatsLogging &&
+                processingStatsLogInterval > 0 &&
                 (producedCount % processingStatsLogInterval == 0))
             {
                 std::cout << "Produced events: " << producedCount << std::endl;

@@ -4,6 +4,7 @@
 #include "processing/RuleAlert.h"
 #include "processing/SymbolStateStore.h"
 
+#include <optional>
 #include <vector>
 
 namespace mdp
