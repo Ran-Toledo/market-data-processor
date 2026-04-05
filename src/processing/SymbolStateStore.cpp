@@ -1,4 +1,3 @@
-// SymbolStateStore.cpp
 #include "processing/SymbolStateStore.h"
 
 namespace mdp
@@ -40,3 +39,4 @@ namespace mdp
         return m_symbolStates.size();
     }
 }
+

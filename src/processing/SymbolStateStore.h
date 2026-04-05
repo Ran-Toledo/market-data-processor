@@ -1,4 +1,3 @@
-// SymbolStateStore.h
 #pragma once
 
 #include "core/MarketDataEvent.h"
