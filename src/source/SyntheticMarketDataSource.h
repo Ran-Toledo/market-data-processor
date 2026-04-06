@@ -5,7 +5,7 @@
 
 #include <vector>
 
-namespace mdp
+namespace mdp::source
 {
     class SyntheticMarketDataSource : public IMarketDataSource
     {

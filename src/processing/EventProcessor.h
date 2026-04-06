@@ -20,6 +20,7 @@ namespace mdp
         const LatencyRecorder& getLatency() const { return m_latency; }
 
     private:
+        void simulateProcessingLoad() const;
         void logAlerts(const std::vector<RuleAlert>& alerts) const;
 
     private:

@@ -12,29 +12,38 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Collect all source files
+# Collect source files
 file(GLOB_RECURSE MDP_SOURCE_FILES
     CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-# Collect all header files
-file(GLOB_RECURSE MDP_HEADER_FILES
+# Collect header files from src
+file(GLOB_RECURSE MDP_SRC_HEADER_FILES
     CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
+# Collect header files from include
+file(GLOB_RECURSE MDP_INCLUDE_HEADER_FILES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+)
+
 # Create executable
 add_executable(market_data_processor
     ${MDP_SOURCE_FILES}
-    ${MDP_HEADER_FILES}
+    ${MDP_SRC_HEADER_FILES}
+    ${MDP_INCLUDE_HEADER_FILES}
 )
 
 # Include directories
 target_include_directories(market_data_processor
-    PRIVATE 
+    PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
 # Compiler warnings
@@ -44,10 +53,23 @@ else()
     target_compile_options(market_data_processor PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# Group source files under "src"
+# Visual Studio filters for headers under src
 source_group(
     TREE "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    PREFIX "Project Files"
+    PREFIX "Header Files"
+    FILES ${MDP_SRC_HEADER_FILES}
+)
+
+# Visual Studio filters for headers under include
+source_group(
+    TREE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PREFIX "Header Files"
+    FILES ${MDP_INCLUDE_HEADER_FILES}
+)
+
+# Visual Studio filters for source files under src
+source_group(
+    TREE "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    PREFIX "Source Files"
     FILES ${MDP_SOURCE_FILES}
-	FILES ${MDP_HEADER_FILES}
 )

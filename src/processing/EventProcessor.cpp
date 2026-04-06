@@ -19,6 +19,8 @@ namespace mdp
 
     void EventProcessor::process(const MarketDataEvent& event)
     {
+        simulateProcessingLoad();
+
         const ValidationResult validationResult = validate(event);
         if (!validationResult.isValid)
         {
@@ -64,6 +66,16 @@ namespace mdp
         m_metrics.onProcessed();
     }
 
+    void EventProcessor::simulateProcessingLoad() const
+    {
+        volatile std::uint64_t sink = 0;
+
+        for (std::size_t i = 0; i < processingSpinIterations; ++i)
+        {
+            sink += static_cast<std::uint64_t>(i) * 1664525ULL + 1013904223ULL;
+        }
+    }
+
     void EventProcessor::logAlerts(const std::vector<RuleAlert>& alerts) const
     {
         if (enableAlertLogging)
@@ -91,4 +103,3 @@ namespace mdp
         }
     }
 }
-

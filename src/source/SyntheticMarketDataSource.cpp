@@ -1,35 +1,55 @@
-// SyntheticMarketDataSource.cpp
 #include "source/SyntheticMarketDataSource.h"
 #include "core/AppConfig.h"
 #include "util/Clock.h"
 
-#include <array>
 #include <random>
 #include <thread>
+#include <vector>
+#include <string>
+#include <cstdio>
 
-namespace
+namespace mdp::source
 {
-    struct SymbolProfile
+    namespace
     {
-        const char* symbol;
-        double basePrice;
-        double maxDeviation;
-    };
+        struct SymbolProfile
+        {
+            std::string symbol;
+            double basePrice;
+            double maxDeviation;
+        };
 
-    constexpr std::array<SymbolProfile, 5> kSymbolProfiles =
-    { {
-        { "AAPL", 185.0, 4.0 },
-        { "MSFT", 420.0, 6.0 },
-        { "GOOG", 155.0, 3.0 },
-        { "AMZN", 180.0, 5.0 },
-        { "NVDA", 900.0, 20.0 }
-    } };
-}
+        std::vector<SymbolProfile> createSymbolProfiles()
+        {
+            std::vector<SymbolProfile> profiles;
+            profiles.reserve(32);
 
-namespace mdp
-{
+            // Real symbols
+            profiles.push_back({ "AAPL", 185.0, 4.0 });
+            profiles.push_back({ "MSFT", 420.0, 6.0 });
+            profiles.push_back({ "GOOG", 155.0, 3.0 });
+            profiles.push_back({ "AMZN", 180.0, 5.0 });
+            profiles.push_back({ "NVDA", 900.0, 20.0 });
+
+            // Synthetic symbols
+            for (int i = 0; i < 27; ++i)
+            {
+                char buffer[16];
+                std::snprintf(buffer, sizeof(buffer), "SYM%02d", i);
+
+                const double basePrice = 50.0 + (i * 10.0);
+                const double deviation = 2.0 + (i % 5);
+
+                profiles.push_back({ buffer, basePrice, deviation });
+            }
+
+            return profiles;
+        }
+
+        const std::vector<SymbolProfile> kSymbolProfiles = createSymbolProfiles();
+    }
+
     SyntheticMarketDataSource::SyntheticMarketDataSource()
-        : m_symbols{ "AAPL", "MSFT", "GOOG", "AMZN", "NVDA" }
     {
     }
 
@@ -37,7 +57,8 @@ namespace mdp
     {
         if (config::sourceSleepMs > 0)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(config::sourceSleepMs));
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(config::sourceSleepMs));
         }
 
         outEvent = generateEvent();
@@ -47,12 +68,16 @@ namespace mdp
     MarketDataEvent SyntheticMarketDataSource::generateEvent()
     {
         static thread_local std::mt19937 generator(std::random_device{}());
-        static thread_local std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
+
+        std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
             kSymbolProfiles.size() - 1);
+
         static thread_local std::uniform_int_distribution<std::uint32_t> volumeDistribution(1, 1000);
 
-        const SymbolProfile& profile = kSymbolProfiles[symbolIndexDistribution(generator)];
+        const SymbolProfile& profile =
+            kSymbolProfiles[symbolIndexDistribution(generator)];
+
         std::uniform_real_distribution<double> priceDistribution(
             profile.basePrice - profile.maxDeviation,
             profile.basePrice + profile.maxDeviation);

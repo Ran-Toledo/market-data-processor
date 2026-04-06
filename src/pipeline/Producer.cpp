@@ -46,6 +46,11 @@ namespace mdp
         return m_producedCount.load();
     }
 
+    std::size_t Producer::getRejectedCount() const
+    {
+        return m_producedCount.load();
+    }
+
     void Producer::produceLoop()
     {
         while (m_running.load())
@@ -62,22 +67,34 @@ namespace mdp
                 break;
             }
 
-            m_workerPool.submit(event);
-
-            const std::size_t producedCount =
-                m_producedCount.fetch_add(1) + 1;
-
-            if (enableEventLogging)
+            if (m_workerPool.submit(event))
             {
-                std::cout << "Produced event | " << event << std::endl;
+                const std::size_t producedCount =
+                    m_producedCount.fetch_add(1) + 1;
+
+                if (enableEventLogging)
+                {
+                    std::cout << "Produced event | " << event << std::endl;
+                }
+
+                if (enableProcessingStatsLogging &&
+                    processingStatsLogInterval > 0 &&
+                    (producedCount % processingStatsLogInterval == 0))
+                {
+                    std::cout << "Produced events: " << producedCount << std::endl;
+                }
+            }
+            else
+            {
+                const std::size_t rejectedCount =
+                    m_rejectedCount.fetch_add(1) + 1;
+
+                if (enableEventLogging)
+                {
+                    std::cout << "Rejected event | " << event << std::endl;
+                }
             }
 
-            if (enableProcessingStatsLogging &&
-                processingStatsLogInterval > 0 &&
-                (producedCount % processingStatsLogInterval == 0))
-            {
-                std::cout << "Produced events: " << producedCount << std::endl;
-            }
         }
     }
 }

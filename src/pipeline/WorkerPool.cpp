@@ -59,10 +59,18 @@ namespace mdp
         }
     }
 
-    void WorkerPool::submit(const MarketDataEvent& event)
+    bool WorkerPool::submit(const MarketDataEvent& event)
     {
         const std::size_t index = getPartitionIndex(event.symbol);
-        m_partitions[index]->queue.push(event);
+        auto& partition = *m_partitions[index];
+
+        const bool pushed = partition.queue.push(event);
+        if (pushed)
+        {
+            partition.acceptedCount.fetch_add(1);
+        }
+
+        return pushed;
     }
 
     void WorkerPool::join()
@@ -110,6 +118,43 @@ namespace mdp
         }
 
         return total;
+    }
+
+    std::uint64_t WorkerPool::getAcceptedCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->acceptedCount.load();
+        }
+
+        return total;
+    }
+
+    std::vector<WorkerPool::PartitionMetrics> WorkerPool::getPartitionMetrics() const
+    {
+        std::vector<PartitionMetrics> metrics;
+        metrics.reserve(m_partitions.size());
+
+        for (std::size_t i = 0; i < m_partitions.size(); ++i)
+        {
+            const auto& partition = *m_partitions[i];
+            const QueueMetricsSnapshot queueMetrics = partition.queue.getMetricsSnapshot();
+
+            PartitionMetrics snapshot;
+            snapshot.partitionIndex = i;
+            snapshot.currentDepth = queueMetrics.currentDepth;
+            snapshot.maxDepth = queueMetrics.maxDepth;
+            snapshot.droppedCount = queueMetrics.droppedCount;
+            snapshot.failedEnqueueCount = queueMetrics.failedEnqueueCount;
+            snapshot.acceptedCount = partition.acceptedCount.load();
+            snapshot.processedCount = partition.processor.getMetrics().getProcessed();
+
+            metrics.push_back(snapshot);
+        }
+
+        return metrics;
     }
 
     std::uint64_t WorkerPool::getAverageLatencyNs() const

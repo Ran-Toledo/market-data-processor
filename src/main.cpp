@@ -17,11 +17,15 @@ int main()
     mdp::config::enableAlertLogging = false;
     mdp::config::enableProcessingStatsLogging = false;
     mdp::config::processingStatsLogInterval = 1000;
-    mdp::config::sourceSleepMs = 1;
+    mdp::config::sourceSleepMs = 0;
     mdp::config::appRuntimeMs = 5;
-    mdp::config::numOfWorkers = 4;
+    mdp::config::numOfWorkers = 5;
+    mdp::config::processingSpinIterations = 5000;
+    mdp::config::workerQueueCapacity = 2048;
+    mdp::config::workerQueueFullStrategy =
+        mdp::config::QueueFullPolicy::DropIncoming;
 
-    mdp::SyntheticMarketDataSource source;
+    mdp::source::SyntheticMarketDataSource source;
 
     mdp::SymbolStateStore symbolStateStore;
     mdp::SymbolStats symbolStats;
@@ -96,32 +100,47 @@ int main()
             << std::endl;
     }
 
-    const auto stateSnapshot = symbolStateStore.snapshot();
-    const auto statsSnapshot = symbolStats.snapshot();
+    const auto queueMetrics = workerPool.getPartitionMetrics();
 
-    std::cout << "\nSymbol summary:\n";
+    std::cout << "\nPer-queue metrics:\n";
 
-    for (const auto& [symbol, state] : stateSnapshot)
+    for (std::size_t i = 0; i < queueMetrics.size(); ++i)
     {
-        std::cout << "Symbol: " << symbol << '\n';
-        std::cout << "  Last price: " << state.lastPrice << '\n';
-        std::cout << "  Last volume: " << state.lastVolume << '\n';
-        std::cout << "  Last sequence: " << state.lastSequenceNumber << '\n';
+        const auto& metrics = queueMetrics[i];
 
-        const auto statsIt = statsSnapshot.find(symbol);
-        if (statsIt != statsSnapshot.end())
-        {
-            const mdp::SymbolStatistics& stats = statsIt->second;
-
-            std::cout << "  Event count: " << stats.eventCount << '\n';
-            std::cout << "  Total volume: " << stats.totalVolume << '\n';
-            std::cout << "  Min price: " << stats.minPrice << '\n';
-            std::cout << "  Max price: " << stats.maxPrice << '\n';
-            std::cout << "  Avg price: " << stats.averagePrice << '\n';
-        }
-
-        std::cout << '\n';
+        std::cout << "Queue " << i << '\n';
+        std::cout << "  Current depth: " << metrics.currentDepth << '\n';
+        std::cout << "  Max depth: " << metrics.maxDepth << '\n';
+        std::cout << "  Drop count: " << metrics.droppedCount << '\n';
+        std::cout << "  Enqueue failures: " << metrics.failedEnqueueCount << '\n';
     }
+
+    //const auto stateSnapshot = symbolStateStore.snapshot();
+    //const auto statsSnapshot = symbolStats.snapshot();
+
+    //std::cout << "\nSymbol summary:\n";
+
+    //for (const auto& [symbol, state] : stateSnapshot)
+    //{
+    //    std::cout << "Symbol: " << symbol << '\n';
+    //    std::cout << "  Last price: " << state.lastPrice << '\n';
+    //    std::cout << "  Last volume: " << state.lastVolume << '\n';
+    //    std::cout << "  Last sequence: " << state.lastSequenceNumber << '\n';
+
+    //    const auto statsIt = statsSnapshot.find(symbol);
+    //    if (statsIt != statsSnapshot.end())
+    //    {
+    //        const mdp::SymbolStatistics& stats = statsIt->second;
+
+    //        std::cout << "  Event count: " << stats.eventCount << '\n';
+    //        std::cout << "  Total volume: " << stats.totalVolume << '\n';
+    //        std::cout << "  Min price: " << stats.minPrice << '\n';
+    //        std::cout << "  Max price: " << stats.maxPrice << '\n';
+    //        std::cout << "  Avg price: " << stats.averagePrice << '\n';
+    //    }
+
+    //    std::cout << '\n';
+    //}
 
     return 0;
 }

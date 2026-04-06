@@ -19,6 +19,7 @@ namespace mdp
         void stop();
 
         std::size_t getProducedCount() const;
+        std::size_t getRejectedCount() const;
 
     private:
         void produceLoop();
@@ -30,5 +31,6 @@ namespace mdp
         std::thread m_workerThread;
         std::atomic<bool> m_running{ false };
         std::atomic<std::size_t> m_producedCount{ 0 };
+        std::atomic<std::size_t> m_rejectedCount{ 0 };
     };
 }
