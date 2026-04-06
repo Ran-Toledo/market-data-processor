@@ -48,6 +48,10 @@ namespace mdp
         std::uint64_t getAverageLatencyNs() const;
         std::uint64_t getMinLatencyNs() const;
         std::uint64_t getMaxLatencyNs() const;
+        std::uint64_t getValidCount() const;
+        std::uint64_t getInvalidCount() const;
+        std::uint64_t getDuplicateCount() const;
+        std::uint64_t getOutOfOrderCount() const;
 
         std::vector<PartitionMetrics> getPartitionMetrics() const;
 

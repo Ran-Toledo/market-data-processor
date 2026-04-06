@@ -2,11 +2,12 @@
 #include "core/AppConfig.h"
 #include "util/Clock.h"
 
-#include <random>
-#include <thread>
-#include <vector>
-#include <string>
 #include <cstdio>
+#include <random>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
 namespace mdp::source
 {
@@ -24,14 +25,12 @@ namespace mdp::source
             std::vector<SymbolProfile> profiles;
             profiles.reserve(32);
 
-            // Real symbols
             profiles.push_back({ "AAPL", 185.0, 4.0 });
             profiles.push_back({ "MSFT", 420.0, 6.0 });
             profiles.push_back({ "GOOG", 155.0, 3.0 });
             profiles.push_back({ "AMZN", 180.0, 5.0 });
             profiles.push_back({ "NVDA", 900.0, 20.0 });
 
-            // Synthetic symbols
             for (int i = 0; i < 27; ++i)
             {
                 char buffer[16];
@@ -68,12 +67,12 @@ namespace mdp::source
     MarketDataEvent SyntheticMarketDataSource::generateEvent()
     {
         static thread_local std::mt19937 generator(std::random_device{}());
+        static thread_local std::uniform_int_distribution<std::uint32_t> volumeDistribution(1, 1000);
+        static thread_local std::unordered_map<std::string, SequenceNumber> nextSequenceBySymbol;
 
         std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
             kSymbolProfiles.size() - 1);
-
-        static thread_local std::uniform_int_distribution<std::uint32_t> volumeDistribution(1, 1000);
 
         const SymbolProfile& profile =
             kSymbolProfiles[symbolIndexDistribution(generator)];
@@ -90,7 +89,7 @@ namespace mdp::source
         const TimestampNs timestampNs = clock::nowNs();
         event.exchangeTimestampNs = timestampNs;
         event.ingestTimestampNs = timestampNs;
-        event.sequenceNumber = m_nextSequenceNumber++;
+        event.sequenceNumber = ++nextSequenceBySymbol[event.symbol];
 
         return event;
     }

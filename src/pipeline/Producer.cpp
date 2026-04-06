@@ -48,7 +48,7 @@ namespace mdp
 
     std::size_t Producer::getRejectedCount() const
     {
-        return m_producedCount.load();
+        return m_rejectedCount.load();
     }
 
     void Producer::produceLoop()
@@ -91,7 +91,7 @@ namespace mdp
 
                 if (enableEventLogging)
                 {
-                    std::cout << "Rejected event | " << event << std::endl;
+                    std::cout << "Rejected event | " << rejectedCount << std::endl;
                 }
             }
 

@@ -18,7 +18,6 @@ namespace mdp::source
         MarketDataEvent generateEvent();
 
     private:
-        SequenceNumber m_nextSequenceNumber = 1;
         std::vector<Symbol> m_symbols;
     };
 }

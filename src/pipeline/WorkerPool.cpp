@@ -245,4 +245,52 @@ namespace mdp
 
         return globalMax;
     }
+
+    std::uint64_t WorkerPool::getValidCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getValid();
+        }
+
+        return total;
+    }
+
+    std::uint64_t WorkerPool::getInvalidCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getInvalid();
+        }
+
+        return total;
+    }
+
+    std::uint64_t WorkerPool::getDuplicateCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getDuplicate();
+        }
+
+        return total;
+    }
+
+    std::uint64_t WorkerPool::getOutOfOrderCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getOutOfOrder();
+        }
+
+        return total;
+    }
 }

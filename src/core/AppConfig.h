@@ -25,4 +25,8 @@ namespace mdp::config
     inline QueueFullPolicy workerQueueFullStrategy = QueueFullPolicy::DropIncoming;
 
     inline std::size_t processingSpinIterations = 0;
+
+    inline bool printProcessingStatsSummary = true;
+    inline bool printQueueMetricsSummary = true;
+    inline bool printSymbolStatsSummary = true;
 }
