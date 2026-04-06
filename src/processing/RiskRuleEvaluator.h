@@ -18,6 +18,6 @@ namespace mdp
 
     private:
         static constexpr double s_priceJumpThreshold = 0.05;
-        static constexpr std::uint32_t s_largeVolumeThreshold = 10000;
+        static constexpr std::uint32_t s_largeVolumeThreshold = 9500;
     };
 }
