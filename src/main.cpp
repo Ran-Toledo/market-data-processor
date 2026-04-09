@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 
@@ -18,34 +19,10 @@ namespace
         std::uint64_t processedCount{ 0 };
     };
 
-    void configureRunProfile()
+    std::filesystem::path getConfigPath()
     {
-        mdp::config::enableEventLogging = false;
-        mdp::config::enableAlertLogging = false;
-        mdp::config::enableProcessingStatsLogging = false;
-        mdp::config::processingStatsLogInterval = 1000;
-        mdp::config::appRuntimeMs = 5;
-        mdp::config::numOfWorkers = 5;
-        mdp::config::producerCount = 1;
-        mdp::config::producerBurstSize = 1;
-        mdp::config::producerSleepUs = 0;
-        mdp::config::processingDelayUs = 0;
-        mdp::config::optionalBusyWorkIterations = 0;
-        mdp::config::periodicSummaryIntervalMs = 1000;
-        mdp::config::workerQueueCapacity = 2048;
-        mdp::config::workerQueueFullStrategy = mdp::config::QueueFullPolicy::DropIncoming;
-        mdp::config::printProcessingStatsSummary = true;
-        mdp::config::printQueueMetricsSummary = true;
-        mdp::config::printSymbolStatsSummary = false;
-
-        if (mdp::config::enableLoadTestMode)
-        {
-            mdp::config::producerBurstSize = 1;
-            mdp::config::producerSleepUs = 0;
-            mdp::config::processingDelayUs = 0;
-            mdp::config::optionalBusyWorkIterations = 10000;
-            mdp::config::workerQueueCapacity = 1024;
-        }
+        return std::filesystem::path(__FILE__).parent_path().parent_path()
+            / "market-data-processor.ini";
     }
 
     double perSecond(std::uint64_t count, double elapsedSeconds)
@@ -72,9 +49,10 @@ namespace
 
     void printProducerMode(const mdp::Producer& producer)
     {
-        if (mdp::config::producerCount != producer.getActiveProducerCount())
+        if (mdp::config::get().producer().producerCount != producer.getActiveProducerCount())
         {
-            std::cout << "Configured producerCount=" << mdp::config::producerCount
+            std::cout << "Configured producerCount="
+                << mdp::config::get().producer().producerCount
                 << ", using " << producer.getActiveProducerCount()
                 << " producer thread with burst generation." << std::endl;
         }
@@ -141,7 +119,8 @@ namespace
     {
         const auto startTime = std::chrono::steady_clock::now();
         const auto endTime =
-            startTime + std::chrono::seconds(mdp::config::appRuntimeMs);
+            startTime + std::chrono::seconds(
+                mdp::config::get().runtime().appRuntimeSeconds);
 
         ThroughputSample previousSample;
         auto previousSummaryTime = startTime;
@@ -151,7 +130,8 @@ namespace
             const auto now = std::chrono::steady_clock::now();
             const auto remaining = endTime - now;
             const auto sleepFor = std::min(
-                std::chrono::milliseconds(mdp::config::periodicSummaryIntervalMs),
+                std::chrono::milliseconds(
+                    mdp::config::get().runtime().periodicSummaryIntervalMs),
                 std::chrono::duration_cast<std::chrono::milliseconds>(remaining));
 
             if (sleepFor.count() > 0)
@@ -175,7 +155,7 @@ namespace
         const mdp::WorkerPool& workerPool,
         double elapsedSeconds)
     {
-        if (!mdp::config::printProcessingStatsSummary)
+        if (!mdp::config::get().reporting().printProcessingStatsSummary)
         {
             return;
         }
@@ -211,7 +191,7 @@ namespace
 
     void printQueueSummary(const mdp::WorkerPool& workerPool)
     {
-        if (!mdp::config::printQueueMetricsSummary)
+        if (!mdp::config::get().reporting().printQueueMetricsSummary)
         {
             return;
         }
@@ -235,7 +215,7 @@ namespace
 
     void printSymbolSummary(const mdp::WorkerPool& workerPool)
     {
-        if (!mdp::config::printSymbolStatsSummary)
+        if (!mdp::config::get().reporting().printSymbolStatsSummary)
         {
             return;
         }
@@ -271,9 +251,9 @@ namespace
 
 int main()
 {
-    configureRunProfile();
+    mdp::config::loadFromFile(getConfigPath());
 
-    mdp::WorkerPool workerPool(mdp::config::numOfWorkers);
+    mdp::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
     mdp::Producer producer(workerPool);
 
     printProducerMode(producer);

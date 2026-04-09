@@ -71,7 +71,9 @@ namespace mdp
             std::atomic<std::uint64_t> acceptedCount{ 0 };
 
             PartitionContext()
-                : queue(config::workerQueueCapacity, config::workerQueueFullStrategy)
+                : queue(
+                    config::get().worker().workerQueueCapacity,
+                    config::get().worker().workerQueueFullStrategy)
             {
             }
         };

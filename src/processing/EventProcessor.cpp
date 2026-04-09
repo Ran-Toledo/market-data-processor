@@ -7,8 +7,6 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
-
-using namespace mdp::config;
 using namespace mdp::validation;
 
 namespace mdp
@@ -84,14 +82,17 @@ namespace mdp
 
     void EventProcessor::simulateProcessingLoad() const
     {
-        if (processingDelayUs > 0)
+        if (config::get().worker().processingDelayUs > 0)
         {
-            std::this_thread::sleep_for(std::chrono::microseconds(processingDelayUs));
+            std::this_thread::sleep_for(
+                std::chrono::microseconds(config::get().worker().processingDelayUs));
         }
 
         volatile std::uint64_t sink = 0;
 
-        for (std::size_t i = 0; i < optionalBusyWorkIterations; ++i)
+        for (std::size_t i = 0;
+            i < config::get().worker().optionalBusyWorkIterations;
+            ++i)
         {
             sink += static_cast<std::uint64_t>(i) * 1664525ULL + 1013904223ULL;
         }
@@ -99,7 +100,7 @@ namespace mdp
 
     void EventProcessor::logAlerts(const std::vector<RuleAlert>& alerts) const
     {
-        if (enableAlertLogging)
+        if (config::get().logging().enableAlertLogging)
         {
             for (const RuleAlert& alert : alerts)
             {

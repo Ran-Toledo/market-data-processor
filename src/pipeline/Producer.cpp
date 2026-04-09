@@ -8,8 +8,6 @@
 #include <stdexcept>
 #include <thread>
 
-using namespace mdp::config;
-
 namespace mdp
 {
     Producer::Producer(IEventRouter& eventRouter)
@@ -81,7 +79,9 @@ namespace mdp
 
         while (m_running.load())
         {
-            for (std::size_t i = 0; i < producerBurstSize && m_running.load(); ++i)
+            for (std::size_t i = 0;
+                i < config::get().producer().producerBurstSize && m_running.load();
+                ++i)
             {
                 MarketDataEvent event;
 
@@ -100,14 +100,15 @@ namespace mdp
                     const std::size_t producedCount =
                         m_producedCount.fetch_add(1) + 1;
 
-                    if (enableEventLogging)
+                    if (config::get().logging().enableEventLogging)
                     {
                         std::cout << "Produced event | " << event << std::endl;
                     }
 
-                    if (enableProcessingStatsLogging &&
-                        processingStatsLogInterval > 0 &&
-                        (producedCount % processingStatsLogInterval == 0))
+                    if (config::get().logging().enableProcessingStatsLogging &&
+                        config::get().reporting().processingStatsLogInterval > 0 &&
+                        (producedCount %
+                            config::get().reporting().processingStatsLogInterval == 0))
                     {
                         std::cout << "Produced events: " << producedCount << std::endl;
                     }
@@ -117,16 +118,17 @@ namespace mdp
                     const std::size_t rejectedCount =
                         m_rejectedCount.fetch_add(1) + 1;
 
-                    if (enableEventLogging)
+                    if (config::get().logging().enableEventLogging)
                     {
                         std::cout << "Rejected event | " << rejectedCount << std::endl;
                     }
                 }
             }
 
-            if (producerSleepUs > 0 && m_running.load())
+            if (config::get().producer().producerSleepUs > 0 && m_running.load())
             {
-                std::this_thread::sleep_for(std::chrono::microseconds(producerSleepUs));
+                std::this_thread::sleep_for(
+                    std::chrono::microseconds(config::get().producer().producerSleepUs));
             }
         }
     }
@@ -134,7 +136,7 @@ namespace mdp
     std::vector<std::unique_ptr<IMarketDataSource>> Producer::createSources()
     {
         const std::size_t configuredProducerCount =
-            std::max<std::size_t>(1, producerCount);
+            std::max<std::size_t>(1, config::get().producer().producerCount);
         const std::size_t activeProducerCount = std::min(
             configuredProducerCount,
             source::SyntheticMarketDataSource::getSymbolUniverseSize());
