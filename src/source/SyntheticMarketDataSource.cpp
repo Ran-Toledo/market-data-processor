@@ -117,24 +117,59 @@ namespace mdp::source
     }
 
     SyntheticMarketDataSource::SyntheticMarketDataSource()
+        : SyntheticMarketDataSource(0, 1)
+    {
+    }
+
+    SyntheticMarketDataSource::SyntheticMarketDataSource(
+        std::size_t producerIndex,
+        std::size_t producerCount)
         : m_symbolStates(kSymbolProfiles.size())
     {
+        if (producerCount == 0)
+        {
+            producerCount = 1;
+        }
+
+        for (std::size_t symbolIndex = producerIndex;
+            symbolIndex < kSymbolProfiles.size();
+            symbolIndex += producerCount)
+        {
+            m_symbolIndexes.push_back(symbolIndex);
+        }
+
+        std::seed_seq seed
+        {
+            static_cast<unsigned int>(std::random_device{}()),
+            static_cast<unsigned int>(producerIndex),
+            static_cast<unsigned int>(producerCount)
+        };
+        m_generator.seed(seed);
+    }
+
+    std::size_t SyntheticMarketDataSource::getSymbolUniverseSize()
+    {
+        return kSymbolProfiles.size();
     }
 
     bool SyntheticMarketDataSource::next(MarketDataEvent& outEvent)
     {
+        if (m_symbolIndexes.empty())
+        {
+            return false;
+        }
+
         outEvent = generateEvent();
         return true;
     }
 
     MarketDataEvent SyntheticMarketDataSource::generateEvent()
     {
-        static thread_local std::mt19937 generator(std::random_device{}());
-        static thread_local std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
+        std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
-            kSymbolProfiles.size() - 1);
+            m_symbolIndexes.size() - 1);
 
-        const std::size_t symbolIndex = symbolIndexDistribution(generator);
+        const std::size_t symbolIndex = m_symbolIndexes[symbolIndexDistribution(m_generator)];
         const SymbolProfile& profile = kSymbolProfiles[symbolIndex];
         SymbolRuntimeState& runtimeState = m_symbolStates[symbolIndex];
 
@@ -144,12 +179,12 @@ namespace mdp::source
         }
 
         runtimeState.lastPrice =
-            generateNextPrice(runtimeState.lastPrice, profile, generator);
+            generateNextPrice(runtimeState.lastPrice, profile, m_generator);
 
         MarketDataEvent event;
         event.symbol = profile.symbol;
         event.price = runtimeState.lastPrice;
-        event.volume = generateVolume(generator);
+        event.volume = generateVolume(m_generator);
 
         const TimestampNs timestampNs = clock::nowNs();
         event.exchangeTimestampNs = timestampNs;

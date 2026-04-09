@@ -3,7 +3,6 @@
 #include "pipeline/Producer.h"
 #include "pipeline/WorkerPool.h"
 #include "processing/SymbolStats.h"
-#include "source/SyntheticMarketDataSource.h"
 
 #include <algorithm>
 #include <chrono>
@@ -26,7 +25,7 @@ namespace
         mdp::config::enableProcessingStatsLogging = false;
         mdp::config::processingStatsLogInterval = 1000;
         mdp::config::appRuntimeMs = 5;
-        mdp::config::numOfWorkers = 2;
+        mdp::config::numOfWorkers = 5;
         mdp::config::producerCount = 1;
         mdp::config::producerBurstSize = 1;
         mdp::config::producerSleepUs = 0;
@@ -41,11 +40,11 @@ namespace
 
         if (mdp::config::enableLoadTestMode)
         {
-            mdp::config::producerBurstSize = 64;
+            mdp::config::producerBurstSize = 1;
             mdp::config::producerSleepUs = 0;
-            mdp::config::processingDelayUs = 500;
-            mdp::config::optionalBusyWorkIterations = 5000;
-            mdp::config::workerQueueCapacity = 256;
+            mdp::config::processingDelayUs = 0;
+            mdp::config::optionalBusyWorkIterations = 10000;
+            mdp::config::workerQueueCapacity = 1024;
         }
     }
 
@@ -274,9 +273,8 @@ int main()
 {
     configureRunProfile();
 
-    mdp::source::SyntheticMarketDataSource source;
     mdp::WorkerPool workerPool(mdp::config::numOfWorkers);
-    mdp::Producer producer(source, workerPool);
+    mdp::Producer producer(workerPool);
 
     printProducerMode(producer);
     std::cout << "Starting pipeline..." << std::endl;

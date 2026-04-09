@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/MarketDataEvent.h"
+#include "pipeline/IEventRouter.h"
 #include "processing/EventProcessor.h"
 #include "processing/SymbolStateStore.h"
 #include "processing/SymbolStats.h"
@@ -15,7 +16,7 @@
 
 namespace mdp
 {
-    class WorkerPool
+    class WorkerPool : public IEventRouter
     {
     public:
         struct PartitionMetrics
@@ -37,7 +38,7 @@ namespace mdp
 
         void start();
         void stop();
-        bool submit(const MarketDataEvent& event);
+        bool submit(const MarketDataEvent& event) override;
         void join();
 
         std::size_t getWorkerCount() const;

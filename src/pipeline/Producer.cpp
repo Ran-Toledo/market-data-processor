@@ -1,18 +1,25 @@
 #include "pipeline/Producer.h"
 #include "core/AppConfig.h"
+#include "source/SyntheticMarketDataSource.h"
 
+#include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <stdexcept>
 #include <thread>
 
 using namespace mdp::config;
 
 namespace mdp
 {
-    Producer::Producer(IMarketDataSource& source, WorkerPool& workerPool)
-        : m_source(source)
-        , m_workerPool(workerPool)
+    Producer::Producer(IEventRouter& eventRouter)
+        : m_sources(createSources())
+        , m_eventRouter(eventRouter)
     {
+        if (m_sources.empty())
+        {
+            throw std::invalid_argument("Producer requires at least one source");
+        }
     }
 
     Producer::~Producer()
@@ -27,7 +34,12 @@ namespace mdp
             return;
         }
 
-        m_workerThread = std::thread(&Producer::produceLoop, this);
+        m_workerThreads.reserve(m_sources.size());
+
+        for (std::size_t i = 0; i < m_sources.size(); ++i)
+        {
+            m_workerThreads.emplace_back(&Producer::produceLoop, this, i);
+        }
     }
 
     void Producer::stop()
@@ -37,10 +49,15 @@ namespace mdp
             return;
         }
 
-        if (m_workerThread.joinable())
+        for (auto& workerThread : m_workerThreads)
         {
-            m_workerThread.join();
+            if (workerThread.joinable())
+            {
+                workerThread.join();
+            }
         }
+
+        m_workerThreads.clear();
     }
 
     std::size_t Producer::getProducedCount() const
@@ -55,20 +72,21 @@ namespace mdp
 
     std::size_t Producer::getActiveProducerCount() const
     {
-        return 1;
+        return m_sources.size();
     }
 
-    void Producer::produceLoop()
+    void Producer::produceLoop(std::size_t producerIndex)
     {
+        IMarketDataSource& source = *m_sources[producerIndex];
+
         while (m_running.load())
         {
             for (std::size_t i = 0; i < producerBurstSize && m_running.load(); ++i)
             {
                 MarketDataEvent event;
 
-                if (!m_source.next(event))
+                if (!source.next(event))
                 {
-                    m_running.store(false);
                     break;
                 }
 
@@ -77,7 +95,7 @@ namespace mdp
                     break;
                 }
 
-                if (m_workerPool.submit(event))
+                if (m_eventRouter.submit(event))
                 {
                     const std::size_t producedCount =
                         m_producedCount.fetch_add(1) + 1;
@@ -111,5 +129,27 @@ namespace mdp
                 std::this_thread::sleep_for(std::chrono::microseconds(producerSleepUs));
             }
         }
+    }
+
+    std::vector<std::unique_ptr<IMarketDataSource>> Producer::createSources()
+    {
+        const std::size_t configuredProducerCount =
+            std::max<std::size_t>(1, producerCount);
+        const std::size_t activeProducerCount = std::min(
+            configuredProducerCount,
+            source::SyntheticMarketDataSource::getSymbolUniverseSize());
+
+        std::vector<std::unique_ptr<IMarketDataSource>> sources;
+        sources.reserve(activeProducerCount);
+
+        for (std::size_t i = 0; i < activeProducerCount; ++i)
+        {
+            sources.push_back(
+                std::make_unique<source::SyntheticMarketDataSource>(
+                    i,
+                    activeProducerCount));
+        }
+
+        return sources;
     }
 }
