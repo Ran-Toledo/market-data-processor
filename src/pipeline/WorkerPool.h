@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace mdp
@@ -26,13 +27,11 @@ namespace mdp
             std::uint64_t failedEnqueueCount{ 0 };
             std::uint64_t acceptedCount{ 0 };
             std::uint64_t processedCount{ 0 };
+            std::size_t capacity{ 0 };
         };
 
     public:
-        WorkerPool(
-            std::size_t workerCount,
-            SymbolStateStore& stateStore,
-            SymbolStats& symbolStats);
+        explicit WorkerPool(std::size_t workerCount);
 
         ~WorkerPool();
 
@@ -54,6 +53,10 @@ namespace mdp
         std::uint64_t getOutOfOrderCount() const;
 
         std::vector<PartitionMetrics> getPartitionMetrics() const;
+        std::unordered_map<Symbol, SymbolState> getStateSnapshot() const;
+        std::unordered_map<Symbol, SymbolStatistics> getStatsSnapshot() const;
+        std::size_t getTrackedStateSymbolCount() const;
+        std::size_t getTrackedStatsSymbolCount() const;
 
     private:
         void workerLoop(std::size_t partitionIndex);
@@ -66,9 +69,8 @@ namespace mdp
             EventProcessor processor;
             std::atomic<std::uint64_t> acceptedCount{ 0 };
 
-            PartitionContext(SymbolStateStore& stateStore, SymbolStats& symbolStats)
+            PartitionContext()
                 : queue(config::workerQueueCapacity, config::workerQueueFullStrategy)
-                , processor(stateStore, symbolStats)
             {
             }
         };

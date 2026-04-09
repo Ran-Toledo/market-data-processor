@@ -20,6 +20,7 @@ namespace mdp
 
         std::size_t getProducedCount() const;
         std::size_t getRejectedCount() const;
+        std::size_t getActiveProducerCount() const;
 
     private:
         void produceLoop();

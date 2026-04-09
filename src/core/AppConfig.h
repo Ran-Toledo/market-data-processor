@@ -15,16 +15,20 @@ namespace mdp::config
     inline bool enableEventLogging = true;
     inline bool enableAlertLogging = true;
     inline bool enableProcessingStatsLogging = true;
+    inline bool enableLoadTestMode = false;
 
     inline std::size_t processingStatsLogInterval = 1000;
-    inline std::uint32_t sourceSleepMs = 1;
     inline std::size_t appRuntimeMs = 10;
     inline std::size_t numOfWorkers = 1;
+    inline std::size_t producerCount = 1;
+    inline std::size_t producerBurstSize = 1;
+    inline std::uint32_t producerSleepUs = 1000;
+    inline std::uint32_t processingDelayUs = 0;
+    inline std::size_t optionalBusyWorkIterations = 0;
+    inline std::size_t periodicSummaryIntervalMs = 1000;
 
     inline std::size_t workerQueueCapacity = 1024;
     inline QueueFullPolicy workerQueueFullStrategy = QueueFullPolicy::DropIncoming;
-
-    inline std::size_t processingSpinIterations = 0;
 
     inline bool printProcessingStatsSummary = true;
     inline bool printQueueMetricsSummary = true;

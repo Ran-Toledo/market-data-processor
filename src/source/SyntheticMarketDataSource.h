@@ -18,6 +18,12 @@ namespace mdp::source
         MarketDataEvent generateEvent();
 
     private:
-        std::vector<Symbol> m_symbols;
+        struct SymbolRuntimeState
+        {
+            double lastPrice{ 0.0 };
+            SequenceNumber nextSequenceNumber{ 0 };
+        };
+
+        std::vector<SymbolRuntimeState> m_symbolStates;
     };
 }

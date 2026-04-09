@@ -5,7 +5,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
 #include <optional>
 #include <unordered_map>
 
@@ -33,7 +32,6 @@ namespace mdp
         std::size_t getTrackedSymbolCount() const;
 
     private:
-        mutable std::mutex m_mutex;
         std::unordered_map<Symbol, SymbolStatistics> m_symbolStats;
     };
 }

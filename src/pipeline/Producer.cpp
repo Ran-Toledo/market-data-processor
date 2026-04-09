@@ -1,7 +1,9 @@
 #include "pipeline/Producer.h"
 #include "core/AppConfig.h"
 
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 using namespace mdp::config;
 
@@ -51,50 +53,63 @@ namespace mdp
         return m_rejectedCount.load();
     }
 
+    std::size_t Producer::getActiveProducerCount() const
+    {
+        return 1;
+    }
+
     void Producer::produceLoop()
     {
         while (m_running.load())
         {
-            MarketDataEvent event;
-
-            if (!m_source.next(event))
+            for (std::size_t i = 0; i < producerBurstSize && m_running.load(); ++i)
             {
-                break;
-            }
+                MarketDataEvent event;
 
-            if (!m_running.load())
-            {
-                break;
-            }
-
-            if (m_workerPool.submit(event))
-            {
-                const std::size_t producedCount =
-                    m_producedCount.fetch_add(1) + 1;
-
-                if (enableEventLogging)
+                if (!m_source.next(event))
                 {
-                    std::cout << "Produced event | " << event << std::endl;
+                    m_running.store(false);
+                    break;
                 }
 
-                if (enableProcessingStatsLogging &&
-                    processingStatsLogInterval > 0 &&
-                    (producedCount % processingStatsLogInterval == 0))
+                if (!m_running.load())
                 {
-                    std::cout << "Produced events: " << producedCount << std::endl;
+                    break;
+                }
+
+                if (m_workerPool.submit(event))
+                {
+                    const std::size_t producedCount =
+                        m_producedCount.fetch_add(1) + 1;
+
+                    if (enableEventLogging)
+                    {
+                        std::cout << "Produced event | " << event << std::endl;
+                    }
+
+                    if (enableProcessingStatsLogging &&
+                        processingStatsLogInterval > 0 &&
+                        (producedCount % processingStatsLogInterval == 0))
+                    {
+                        std::cout << "Produced events: " << producedCount << std::endl;
+                    }
+                }
+                else
+                {
+                    const std::size_t rejectedCount =
+                        m_rejectedCount.fetch_add(1) + 1;
+
+                    if (enableEventLogging)
+                    {
+                        std::cout << "Rejected event | " << rejectedCount << std::endl;
+                    }
                 }
             }
-            else
+
+            if (producerSleepUs > 0 && m_running.load())
             {
-                const std::size_t rejectedCount =
-                    m_rejectedCount.fetch_add(1) + 1;
-
-                if (enableEventLogging)
-                {
-                    std::cout << "Rejected event | " << rejectedCount << std::endl;
-                }
+                std::this_thread::sleep_for(std::chrono::microseconds(producerSleepUs));
             }
-
         }
     }
 }

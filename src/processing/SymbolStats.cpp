@@ -5,8 +5,6 @@ namespace mdp
 {
     void SymbolStats::record(const MarketDataEvent& event)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
         SymbolStatistics& stats = m_symbolStats[event.symbol];
 
         if (stats.eventCount == 0)
@@ -36,8 +34,6 @@ namespace mdp
 
     std::optional<SymbolStatistics> SymbolStats::tryGet(const Symbol& symbol) const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
         const auto it = m_symbolStats.find(symbol);
         if (it == m_symbolStats.end())
         {
@@ -49,13 +45,11 @@ namespace mdp
 
     std::unordered_map<Symbol, SymbolStatistics> SymbolStats::snapshot() const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         return m_symbolStats;
     }
 
     std::size_t SymbolStats::getTrackedSymbolCount() const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         return m_symbolStats.size();
     }
 }

@@ -4,19 +4,15 @@
 #include "processing/EventValidator.h"
 #include "util/Clock.h"
 
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 using namespace mdp::config;
 using namespace mdp::validation;
 
 namespace mdp
 {
-    EventProcessor::EventProcessor(SymbolStateStore& stateStore, SymbolStats& symbolStats)
-        : m_stateStore(stateStore)
-        , m_symbolStats(symbolStats)
-    {
-    }
-
     void EventProcessor::process(const MarketDataEvent& event)
     {
         simulateProcessingLoad();
@@ -66,11 +62,36 @@ namespace mdp
         m_metrics.onProcessed();
     }
 
+    std::unordered_map<Symbol, SymbolState> EventProcessor::getStateSnapshot() const
+    {
+        return m_stateStore.snapshot();
+    }
+
+    std::unordered_map<Symbol, SymbolStatistics> EventProcessor::getStatsSnapshot() const
+    {
+        return m_symbolStats.snapshot();
+    }
+
+    std::size_t EventProcessor::getTrackedStateSymbolCount() const
+    {
+        return m_stateStore.getTrackedSymbolCount();
+    }
+
+    std::size_t EventProcessor::getTrackedStatsSymbolCount() const
+    {
+        return m_symbolStats.getTrackedSymbolCount();
+    }
+
     void EventProcessor::simulateProcessingLoad() const
     {
+        if (processingDelayUs > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::microseconds(processingDelayUs));
+        }
+
         volatile std::uint64_t sink = 0;
 
-        for (std::size_t i = 0; i < processingSpinIterations; ++i)
+        for (std::size_t i = 0; i < optionalBusyWorkIterations; ++i)
         {
             sink += static_cast<std::uint64_t>(i) * 1664525ULL + 1013904223ULL;
         }

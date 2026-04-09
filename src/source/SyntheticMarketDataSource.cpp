@@ -1,5 +1,4 @@
 #include "source/SyntheticMarketDataSource.h"
-#include "core/AppConfig.h"
 #include "util/Clock.h"
 
 #include <algorithm>
@@ -7,8 +6,6 @@
 #include <cstdio>
 #include <random>
 #include <string>
-#include <thread>
-#include <unordered_map>
 #include <vector>
 
 namespace mdp::source
@@ -120,17 +117,12 @@ namespace mdp::source
     }
 
     SyntheticMarketDataSource::SyntheticMarketDataSource()
+        : m_symbolStates(kSymbolProfiles.size())
     {
     }
 
     bool SyntheticMarketDataSource::next(MarketDataEvent& outEvent)
     {
-        if (config::sourceSleepMs > 0)
-        {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(config::sourceSleepMs));
-        }
-
         outEvent = generateEvent();
         return true;
     }
@@ -141,29 +133,28 @@ namespace mdp::source
         static thread_local std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
             kSymbolProfiles.size() - 1);
-        static thread_local std::unordered_map<std::string, double> lastPriceBySymbol;
-        static thread_local std::unordered_map<std::string, SequenceNumber> nextSequenceBySymbol;
 
-        const SymbolProfile& profile =
-            kSymbolProfiles[symbolIndexDistribution(generator)];
+        const std::size_t symbolIndex = symbolIndexDistribution(generator);
+        const SymbolProfile& profile = kSymbolProfiles[symbolIndex];
+        SymbolRuntimeState& runtimeState = m_symbolStates[symbolIndex];
 
-        double& lastPrice = lastPriceBySymbol[profile.symbol];
-        if (lastPrice == 0.0)
+        if (runtimeState.lastPrice == 0.0)
         {
-            lastPrice = profile.basePrice;
+            runtimeState.lastPrice = profile.basePrice;
         }
 
-        lastPrice = generateNextPrice(lastPrice, profile, generator);
+        runtimeState.lastPrice =
+            generateNextPrice(runtimeState.lastPrice, profile, generator);
 
         MarketDataEvent event;
         event.symbol = profile.symbol;
-        event.price = lastPrice;
+        event.price = runtimeState.lastPrice;
         event.volume = generateVolume(generator);
 
         const TimestampNs timestampNs = clock::nowNs();
         event.exchangeTimestampNs = timestampNs;
         event.ingestTimestampNs = timestampNs;
-        event.sequenceNumber = ++nextSequenceBySymbol[event.symbol];
+        event.sequenceNumber = ++runtimeState.nextSequenceNumber;
 
         return event;
     }
