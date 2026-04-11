@@ -42,11 +42,17 @@ namespace mdp
 
     void Producer::stop()
     {
-        if (!m_running.exchange(false))
-        {
-            return;
-        }
+        requestStop();
+        join();
+    }
 
+    void Producer::requestStop()
+    {
+        m_running.store(false);
+    }
+
+    void Producer::join()
+    {
         for (auto& workerThread : m_workerThreads)
         {
             if (workerThread.joinable())

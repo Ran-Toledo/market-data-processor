@@ -63,6 +63,20 @@ namespace mdp
     }
 
     template <typename T>
+    void BoundedConcurrentQueue<T>::closeAndDiscard()
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_closed = true;
+            m_queue.clear();
+            m_currentDepth.store(0);
+        }
+
+        m_notEmptyCondition.notify_all();
+        m_notFullCondition.notify_all();
+    }
+
+    template <typename T>
     bool BoundedConcurrentQueue<T>::isClosed() const
     {
         std::lock_guard<std::mutex> lock(m_mutex);

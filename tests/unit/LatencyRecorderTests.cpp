@@ -19,4 +19,7 @@ void runLatencyRecorderTests()
     assert(recorder.getAverageLatencyNs() == 133);
     assert(recorder.getMinLatencyNs() == 50);
     assert(recorder.getMaxLatencyNs() == 250);
+    assert(recorder.getPercentileLatencyNs(50.0) == 128);
+    assert(recorder.getPercentileLatencyNs(95.0) == 256);
+    assert(recorder.getPercentileLatencyNs(99.0) == 256);
 }

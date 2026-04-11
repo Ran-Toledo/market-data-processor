@@ -37,7 +37,7 @@ namespace mdp
         ~WorkerPool();
 
         void start();
-        void stop();
+        void stop(bool drainQueuedEvents = true);
         bool submit(const MarketDataEvent& event) override;
         void join();
 
@@ -48,6 +48,8 @@ namespace mdp
         std::uint64_t getAverageLatencyNs() const;
         std::uint64_t getMinLatencyNs() const;
         std::uint64_t getMaxLatencyNs() const;
+        std::uint64_t getPercentileLatencyNs(double percentile) const;
+        LatencyRecorder::BucketSnapshot getLatencyBucketSnapshot() const;
         std::uint64_t getValidCount() const;
         std::uint64_t getInvalidCount() const;
         std::uint64_t getDuplicateCount() const;

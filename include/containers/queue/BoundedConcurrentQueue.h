@@ -31,6 +31,7 @@ namespace mdp
         bool pop(T& item);
 
         void close();
+        void closeAndDiscard();
         bool isClosed() const;
 
         std::size_t size() const;

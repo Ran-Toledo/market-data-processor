@@ -42,7 +42,7 @@ namespace mdp
         }
     }
 
-    void WorkerPool::stop()
+    void WorkerPool::stop(bool drainQueuedEvents)
     {
         if (!m_running.exchange(false))
         {
@@ -51,7 +51,14 @@ namespace mdp
 
         for (auto& partition : m_partitions)
         {
-            partition->queue.close();
+            if (drainQueuedEvents)
+            {
+                partition->queue.close();
+            }
+            else
+            {
+                partition->queue.closeAndDiscard();
+            }
         }
     }
 
@@ -295,6 +302,41 @@ namespace mdp
         }
 
         return globalMax;
+    }
+
+    std::uint64_t WorkerPool::getPercentileLatencyNs(double percentile) const
+    {
+        const LatencyRecorder::BucketSnapshot mergedBuckets = getLatencyBucketSnapshot();
+        std::uint64_t totalCount = 0;
+
+        for (const auto& partition : m_partitions)
+        {
+            const LatencyRecorder& latency = partition->processor.getLatency();
+            totalCount += latency.getCount();
+        }
+
+        return LatencyRecorder::percentileFromBuckets(
+            mergedBuckets,
+            totalCount,
+            percentile);
+    }
+
+    LatencyRecorder::BucketSnapshot WorkerPool::getLatencyBucketSnapshot() const
+    {
+        LatencyRecorder::BucketSnapshot mergedBuckets{};
+
+        for (const auto& partition : m_partitions)
+        {
+            const LatencyRecorder& latency = partition->processor.getLatency();
+            const auto partitionBuckets = latency.getBucketSnapshot();
+
+            for (std::size_t i = 0; i < mergedBuckets.size(); ++i)
+            {
+                mergedBuckets[i] += partitionBuckets[i];
+            }
+        }
+
+        return mergedBuckets;
     }
 
     std::uint64_t WorkerPool::getValidCount() const

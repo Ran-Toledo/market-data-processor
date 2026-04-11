@@ -14,3 +14,14 @@ cmake --build --preset build-debug
 ```powershell
 .\build\Debug\market_data_processor.exe
 ```
+
+## Performance Load Experiments
+
+```powershell
+.\build.bat
+.\run_performance_tests.bat
+```
+
+The performance runner uses Release builds and writes CSV results under
+`results/`, including interval samples for time-series plots. See
+`docs/performance-load-tests.md` for the profile list and analysis workflow.

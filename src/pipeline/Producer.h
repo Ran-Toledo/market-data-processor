@@ -17,7 +17,9 @@ namespace mdp
         ~Producer();
 
         void start();
+        void requestStop();
         void stop();
+        void join();
 
         std::size_t getProducedCount() const;
         std::size_t getRejectedCount() const;

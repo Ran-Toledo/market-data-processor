@@ -188,6 +188,12 @@ namespace
             << workerPool.getMinLatencyNs() << " ns" << std::endl;
         std::cout << "Max latency: "
             << workerPool.getMaxLatencyNs() << " ns" << std::endl;
+        std::cout << "P50 latency: "
+            << workerPool.getPercentileLatencyNs(50.0) << " ns" << std::endl;
+        std::cout << "P95 latency: "
+            << workerPool.getPercentileLatencyNs(95.0) << " ns" << std::endl;
+        std::cout << "P99 latency: "
+            << workerPool.getPercentileLatencyNs(99.0) << " ns" << std::endl;
     }
 
     void printQueueSummary(const mdp::WorkerPool& workerPool)
@@ -268,8 +274,9 @@ int main()
 
     std::cout << "Stopping pipeline..." << std::endl;
 
-    producer.stop();
+    producer.requestStop();
     workerPool.stop();
+    producer.join();
     workerPool.join();
 
     const auto endTime = std::chrono::steady_clock::now();

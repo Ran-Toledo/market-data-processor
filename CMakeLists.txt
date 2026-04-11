@@ -66,7 +66,20 @@ add_executable(market_data_processor_tests
     ${MDP_INCLUDE_HEADER_FILES}
 )
 
+add_executable(pipeline_load_experiments
+    tests/perf/PipelineLoadTestRunner.cpp
+    ${MDP_LIBRARY_SOURCE_FILES}
+    ${MDP_SRC_HEADER_FILES}
+    ${MDP_INCLUDE_HEADER_FILES}
+)
+
 target_include_directories(market_data_processor_tests
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+target_include_directories(pipeline_load_experiments
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
