@@ -42,10 +42,15 @@ The profile files under `tests/perf/configs` cover:
 - Worker scaling: 1, 2, 4, and 8 workers
 - Producer scaling: 1, 2, 4, and 8 producers
 - Queue capacity pressure: 64, 256, 2048, and 8192 entries
-- Processing slowdown: 0, 10, 50, 100, 200, and 500 microseconds
 - CPU-style processing work: 0, 100, 1000, and 10000 busy-work iterations
 - Burst pressure: 1, 10, 100, and 1000 events per 100 microsecond sleep cycle
 - Queue full policy comparison between `block_producer` and `drop_incoming`
+
+Most scaling and backpressure profiles use `optional_busy_work_iterations = 1000`
+and `processing_delay_us = 0`. That keeps comparisons CPU-bound and avoids
+measuring OS scheduler behavior from microsecond sleeps. The `baseline` and
+`busy_work_0` profiles keep busy work disabled to measure no-extra-work
+throughput.
 
 ## Metrics
 
