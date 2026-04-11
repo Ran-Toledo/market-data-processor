@@ -4,8 +4,6 @@ namespace mdp
 {
     void SymbolStateStore::update(const MarketDataEvent& event)
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
         SymbolState& state = m_symbolStates[event.symbol];
         state.lastPrice = event.price;
         state.lastVolume = event.volume;
@@ -16,8 +14,6 @@ namespace mdp
 
     std::optional<SymbolState> SymbolStateStore::tryGet(const Symbol& symbol) const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
         const auto it = m_symbolStates.find(symbol);
         if (it == m_symbolStates.end())
         {
@@ -29,13 +25,11 @@ namespace mdp
 
     std::unordered_map<Symbol, SymbolState> SymbolStateStore::snapshot() const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         return m_symbolStates;
     }
 
     std::size_t SymbolStateStore::getTrackedSymbolCount() const
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
         return m_symbolStates.size();
     }
 }

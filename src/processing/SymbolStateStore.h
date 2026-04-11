@@ -2,7 +2,6 @@
 
 #include "core/MarketDataEvent.h"
 
-#include <mutex>
 #include <optional>
 #include <unordered_map>
 
@@ -29,7 +28,6 @@ namespace mdp
         std::size_t getTrackedSymbolCount() const;
 
     private:
-        mutable std::mutex m_mutex;
         std::unordered_map<Symbol, SymbolState> m_symbolStates;
     };
 }

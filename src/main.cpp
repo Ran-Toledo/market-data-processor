@@ -1,167 +1,288 @@
 // main.cpp
 #include "core/AppConfig.h"
-#include "core/MarketDataEvent.h"
 #include "pipeline/Producer.h"
 #include "pipeline/WorkerPool.h"
-#include "processing/SymbolStateStore.h"
 #include "processing/SymbolStats.h"
-#include "source/SyntheticMarketDataSource.h"
 
+#include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <thread>
 
+namespace
+{
+    struct ThroughputSample
+    {
+        std::size_t producedCount{ 0 };
+        std::size_t rejectedCount{ 0 };
+        std::uint64_t processedCount{ 0 };
+    };
+
+    std::filesystem::path getConfigPath()
+    {
+        return std::filesystem::path(__FILE__).parent_path().parent_path()
+            / "market-data-processor.ini";
+    }
+
+    double perSecond(std::uint64_t count, double elapsedSeconds)
+    {
+        if (elapsedSeconds <= 0.0)
+        {
+            return 0.0;
+        }
+
+        return static_cast<double>(count) / elapsedSeconds;
+    }
+
+    bool isNearCapacity(const mdp::WorkerPool::PartitionMetrics& metrics)
+    {
+        return metrics.capacity > 0 &&
+            (metrics.currentDepth * 10 >= metrics.capacity * 9);
+    }
+
+    bool reachedNearCapacity(const mdp::WorkerPool::PartitionMetrics& metrics)
+    {
+        return metrics.capacity > 0 &&
+            (metrics.maxDepth * 10 >= metrics.capacity * 9);
+    }
+
+    void printProducerMode(const mdp::Producer& producer)
+    {
+        if (mdp::config::get().producer().producerCount != producer.getActiveProducerCount())
+        {
+            std::cout << "Configured producerCount="
+                << mdp::config::get().producer().producerCount
+                << ", using " << producer.getActiveProducerCount()
+                << " producer thread with burst generation." << std::endl;
+        }
+    }
+
+    void printPeriodicSummary(
+        const mdp::Producer& producer,
+        const mdp::WorkerPool& workerPool,
+        ThroughputSample& previousSample,
+        const std::chrono::steady_clock::time_point& previousTime,
+        const std::chrono::steady_clock::time_point& currentTime)
+    {
+        const auto partitionMetrics = workerPool.getPartitionMetrics();
+        const std::size_t producedCount = producer.getProducedCount();
+        const std::size_t rejectedCount = producer.getRejectedCount();
+        const std::uint64_t processedCount = workerPool.getProcessedCount();
+
+        const double elapsedSeconds =
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                currentTime - previousTime).count();
+
+        const std::uint64_t producedDelta = producedCount - previousSample.producedCount;
+        const std::uint64_t rejectedDelta = rejectedCount - previousSample.rejectedCount;
+        const std::uint64_t processedDelta = processedCount - previousSample.processedCount;
+
+        std::size_t totalDepth = 0;
+        std::size_t totalCapacity = 0;
+        std::size_t maxDepthSeen = 0;
+        std::size_t nearCapacityQueues = 0;
+        std::size_t saturatedQueues = 0;
+
+        for (const auto& metrics : partitionMetrics)
+        {
+            totalDepth += metrics.currentDepth;
+            totalCapacity += metrics.capacity;
+            maxDepthSeen = std::max(maxDepthSeen, metrics.maxDepth);
+
+            if (isNearCapacity(metrics))
+            {
+                ++nearCapacityQueues;
+            }
+
+            if (reachedNearCapacity(metrics))
+            {
+                ++saturatedQueues;
+            }
+        }
+
+        std::cout << "[summary] produced/sec=" << perSecond(producedDelta, elapsedSeconds)
+            << " processed/sec=" << perSecond(processedDelta, elapsedSeconds)
+            << " rejected/sec=" << perSecond(rejectedDelta, elapsedSeconds)
+            << " queueDepth=" << totalDepth << '/' << totalCapacity
+            << " maxDepthSeen=" << maxDepthSeen
+            << " nearCapacityQueues=" << nearCapacityQueues << '/' << partitionMetrics.size()
+            << " saturatedQueues=" << saturatedQueues << '/' << partitionMetrics.size()
+            << std::endl;
+
+        previousSample.producedCount = producedCount;
+        previousSample.rejectedCount = rejectedCount;
+        previousSample.processedCount = processedCount;
+    }
+
+    void runForConfiguredDuration(mdp::Producer& producer, const mdp::WorkerPool& workerPool)
+    {
+        const auto startTime = std::chrono::steady_clock::now();
+        const auto endTime =
+            startTime + std::chrono::seconds(
+                mdp::config::get().runtime().appRuntimeSeconds);
+
+        ThroughputSample previousSample;
+        auto previousSummaryTime = startTime;
+
+        while (std::chrono::steady_clock::now() < endTime)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            const auto remaining = endTime - now;
+            const auto sleepFor = std::min(
+                std::chrono::milliseconds(
+                    mdp::config::get().runtime().periodicSummaryIntervalMs),
+                std::chrono::duration_cast<std::chrono::milliseconds>(remaining));
+
+            if (sleepFor.count() > 0)
+            {
+                std::this_thread::sleep_for(sleepFor);
+            }
+
+            const auto summaryTime = std::chrono::steady_clock::now();
+            printPeriodicSummary(
+                producer,
+                workerPool,
+                previousSample,
+                previousSummaryTime,
+                summaryTime);
+            previousSummaryTime = summaryTime;
+        }
+    }
+
+    void printProcessingSummary(
+        const mdp::Producer& producer,
+        const mdp::WorkerPool& workerPool,
+        double elapsedSeconds)
+    {
+        if (!mdp::config::get().reporting().printProcessingStatsSummary)
+        {
+            return;
+        }
+
+        const std::size_t producedCount = producer.getProducedCount();
+        const std::size_t rejectedCount = producer.getRejectedCount();
+        const std::size_t generatedCount = producedCount + rejectedCount;
+        const std::uint64_t processedCount = workerPool.getProcessedCount();
+
+        std::cout << "Generated count: " << generatedCount << std::endl;
+        std::cout << "Accepted count: " << producedCount << std::endl;
+        std::cout << "Rejected count: " << rejectedCount << std::endl;
+        std::cout << "Processed count: " << processedCount << std::endl;
+        std::cout << "Valid events: " << workerPool.getValidCount() << std::endl;
+        std::cout << "Invalid events: " << workerPool.getInvalidCount() << std::endl;
+        std::cout << "Duplicate events: " << workerPool.getDuplicateCount() << std::endl;
+        std::cout << "Out-of-order events: " << workerPool.getOutOfOrderCount() << std::endl;
+        std::cout << "Sequence gaps: " << workerPool.getSequenceGapCount() << std::endl;
+        std::cout << "Tracked symbols in worker-local state: "
+            << workerPool.getTrackedStateSymbolCount() << std::endl;
+        std::cout << "Tracked symbols in worker-local stats: "
+            << workerPool.getTrackedStatsSymbolCount() << std::endl;
+        std::cout << "Produced throughput: "
+            << perSecond(producedCount, elapsedSeconds) << " events/sec" << std::endl;
+        std::cout << "Processed throughput: "
+            << perSecond(processedCount, elapsedSeconds) << " events/sec" << std::endl;
+        std::cout << "Average latency: "
+            << workerPool.getAverageLatencyNs() << " ns" << std::endl;
+        std::cout << "Min latency: "
+            << workerPool.getMinLatencyNs() << " ns" << std::endl;
+        std::cout << "Max latency: "
+            << workerPool.getMaxLatencyNs() << " ns" << std::endl;
+    }
+
+    void printQueueSummary(const mdp::WorkerPool& workerPool)
+    {
+        if (!mdp::config::get().reporting().printQueueMetricsSummary)
+        {
+            return;
+        }
+
+        const auto queueMetrics = workerPool.getPartitionMetrics();
+
+        std::cout << "\nPer-queue metrics:\n";
+
+        for (const auto& metrics : queueMetrics)
+        {
+            std::cout << "Queue " << metrics.partitionIndex << '\n';
+            std::cout << "  Current depth: " << metrics.currentDepth
+                << "/" << metrics.capacity << '\n';
+            std::cout << "  Max depth: " << metrics.maxDepth << '\n';
+            std::cout << "  Drop count: " << metrics.droppedCount << '\n';
+            std::cout << "  Enqueue failures: " << metrics.failedEnqueueCount << '\n';
+            std::cout << "  Near capacity: "
+                << (reachedNearCapacity(metrics) ? "yes" : "no") << '\n';
+        }
+    }
+
+    void printSymbolSummary(const mdp::WorkerPool& workerPool)
+    {
+        if (!mdp::config::get().reporting().printSymbolStatsSummary)
+        {
+            return;
+        }
+
+        const auto stateSnapshot = workerPool.getStateSnapshot();
+        const auto statsSnapshot = workerPool.getStatsSnapshot();
+
+        std::cout << "\nSymbol summary:\n";
+
+        for (const auto& [symbol, state] : stateSnapshot)
+        {
+            std::cout << "Symbol: " << symbol << '\n';
+            std::cout << "  Last price: " << state.lastPrice << '\n';
+            std::cout << "  Last volume: " << state.lastVolume << '\n';
+            std::cout << "  Last sequence: " << state.lastSequenceNumber << '\n';
+
+            const auto statsIt = statsSnapshot.find(symbol);
+            if (statsIt != statsSnapshot.end())
+            {
+                const mdp::SymbolStatistics& stats = statsIt->second;
+
+                std::cout << "  Event count: " << stats.eventCount << '\n';
+                std::cout << "  Total volume: " << stats.totalVolume << '\n';
+                std::cout << "  Min price: " << stats.minPrice << '\n';
+                std::cout << "  Max price: " << stats.maxPrice << '\n';
+                std::cout << "  Avg price: " << stats.averagePrice << '\n';
+            }
+
+            std::cout << '\n';
+        }
+    }
+}
+
 int main()
 {
-	mdp::config::enableEventLogging = false;
-	mdp::config::enableAlertLogging = false;
-	mdp::config::enableProcessingStatsLogging = false;
-	mdp::config::processingStatsLogInterval = 1000;
-	mdp::config::sourceSleepMs = 0;
-	mdp::config::appRuntimeMs = 5;
-	mdp::config::numOfWorkers = 2;
-	mdp::config::processingSpinIterations = 5000;
-	mdp::config::workerQueueCapacity = 2048;
-	mdp::config::workerQueueFullStrategy = mdp::config::QueueFullPolicy::DropIncoming;
-	mdp::config::printProcessingStatsSummary = true;
-	mdp::config::printQueueMetricsSummary = true;
-	mdp::config::printSymbolStatsSummary = true;
+    mdp::config::loadFromFile(getConfigPath());
 
-	mdp::source::SyntheticMarketDataSource source;
+    mdp::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
+    mdp::Producer producer(workerPool);
 
-	mdp::SymbolStateStore symbolStateStore;
-	mdp::SymbolStats symbolStats;
+    printProducerMode(producer);
+    std::cout << "Starting pipeline..." << std::endl;
 
-	mdp::WorkerPool workerPool(
-		mdp::config::numOfWorkers,
-		symbolStateStore,
-		symbolStats);
+    workerPool.start();
+    producer.start();
 
-	mdp::Producer producer(source, workerPool);
+    const auto startTime = std::chrono::steady_clock::now();
+    runForConfiguredDuration(producer, workerPool);
 
-	std::cout << "Starting pipeline..." << std::endl;
+    std::cout << "Stopping pipeline..." << std::endl;
 
-	workerPool.start();
-	producer.start();
+    producer.stop();
+    workerPool.stop();
+    workerPool.join();
 
-	const auto startTime = std::chrono::steady_clock::now();
+    const auto endTime = std::chrono::steady_clock::now();
+    const auto elapsedMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            endTime - startTime).count();
+    const double elapsedSeconds = static_cast<double>(elapsedMs) / 1000.0;
 
-	std::this_thread::sleep_for(
-		std::chrono::seconds(mdp::config::appRuntimeMs));
+    std::cout << "Elapsed time: " << elapsedSeconds << " seconds" << std::endl;
 
-	std::cout << "Stopping pipeline..." << std::endl;
+    printProcessingSummary(producer, workerPool, elapsedSeconds);
+    printQueueSummary(workerPool);
+    printSymbolSummary(workerPool);
 
-	producer.stop();
-	workerPool.stop();
-	workerPool.join();
-
-	const auto endTime = std::chrono::steady_clock::now();
-
-	const auto elapsedMs =
-		std::chrono::duration_cast<std::chrono::milliseconds>(
-			endTime - startTime).count();
-
-	const double elapsedSeconds = static_cast<double>(elapsedMs) / 1000.0;
-
-	std::cout << "Elapsed time: " << elapsedSeconds << " seconds" << std::endl;
-
-	if (mdp::config::printProcessingStatsSummary)
-	{
-		const std::size_t generatedCount = producer.getProducedCount() + producer.getRejectedCount();
-		const std::size_t acceptedCount = producer.getProducedCount();
-		const std::size_t rejectedCount = producer.getRejectedCount();
-		const std::size_t processedCount = workerPool.getProcessedCount();
-		const std::uint64_t validCount = workerPool.getValidCount();
-		const std::uint64_t invalidCount = workerPool.getInvalidCount();
-		const std::uint64_t duplicateCount = workerPool.getDuplicateCount();
-		const std::uint64_t outOfOrderCount = workerPool.getOutOfOrderCount();
-
-		std::cout << "Generated count: " << generatedCount << std::endl;
-		std::cout << "Accepted count: " << acceptedCount << std::endl;
-		std::cout << "Rejected count: " << rejectedCount << std::endl;
-		std::cout << "Processed count: " << processedCount << std::endl;
-		std::cout << "Valid events: " << validCount << std::endl;
-		std::cout << "Invalid events: " << invalidCount << std::endl;
-		std::cout << "Duplicate events: " << duplicateCount << std::endl;
-		std::cout << "Out-of-order events: " << outOfOrderCount << std::endl;
-
-		std::cout << "Tracked symbols in state store: "
-			<< symbolStateStore.getTrackedSymbolCount() << std::endl;
-
-		std::cout << "Tracked symbols in stats: "
-			<< symbolStats.getTrackedSymbolCount() << std::endl;
-
-		std::cout << "Average latency: "
-			<< workerPool.getAverageLatencyNs() << " ns" << std::endl;
-
-		std::cout << "Min latency: "
-			<< workerPool.getMinLatencyNs() << " ns" << std::endl;
-
-		std::cout << "Max latency: "
-			<< workerPool.getMaxLatencyNs() << " ns" << std::endl;
-
-		if (elapsedSeconds > 0.0)
-		{
-			const double throughput =
-				static_cast<double>(processedCount) / elapsedSeconds;
-
-			std::cout << "Throughput: "
-				<< throughput << " events/sec" << std::endl;
-		}
-		else
-		{
-			std::cout << "Throughput: elapsed time too small to calculate."
-				<< std::endl;
-		}
-	}
-
-	if (mdp::config::printQueueMetricsSummary)
-	{
-		const auto queueMetrics = workerPool.getPartitionMetrics();
-
-		std::cout << "\nPer-queue metrics:\n";
-
-		for (std::size_t i = 0; i < queueMetrics.size(); ++i)
-		{
-			const auto& metrics = queueMetrics[i];
-
-			std::cout << "Queue " << i << '\n';
-			std::cout << "  Current depth: " << metrics.currentDepth << '\n';
-			std::cout << "  Max depth: " << metrics.maxDepth << '\n';
-			std::cout << "  Drop count: " << metrics.droppedCount << '\n';
-			std::cout << "  Enqueue failures: " << metrics.failedEnqueueCount << '\n';
-		}
-	}
-
-	if (mdp::config::printSymbolStatsSummary)
-	{
-		const auto stateSnapshot = symbolStateStore.snapshot();
-		const auto statsSnapshot = symbolStats.snapshot();
-
-		std::cout << "\nSymbol summary:\n";
-
-		for (const auto& [symbol, state] : stateSnapshot)
-		{
-			std::cout << "Symbol: " << symbol << '\n';
-			std::cout << "  Last price: " << state.lastPrice << '\n';
-			std::cout << "  Last volume: " << state.lastVolume << '\n';
-			std::cout << "  Last sequence: " << state.lastSequenceNumber << '\n';
-
-			const auto statsIt = statsSnapshot.find(symbol);
-			if (statsIt != statsSnapshot.end())
-			{
-				const mdp::SymbolStatistics& stats = statsIt->second;
-
-				std::cout << "  Event count: " << stats.eventCount << '\n';
-				std::cout << "  Total volume: " << stats.totalVolume << '\n';
-				std::cout << "  Min price: " << stats.minPrice << '\n';
-				std::cout << "  Max price: " << stats.maxPrice << '\n';
-				std::cout << "  Avg price: " << stats.averagePrice << '\n';
-			}
-
-			std::cout << '\n';
-		}
-	}
-
-	return 0;
+    return 0;
 }

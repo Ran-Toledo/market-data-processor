@@ -6,10 +6,7 @@
 
 namespace mdp
 {
-    WorkerPool::WorkerPool(
-        std::size_t workerCount,
-        SymbolStateStore& stateStore,
-        SymbolStats& symbolStats)
+    WorkerPool::WorkerPool(std::size_t workerCount)
     {
         if (workerCount == 0)
         {
@@ -20,8 +17,7 @@ namespace mdp
 
         for (std::size_t i = 0; i < workerCount; ++i)
         {
-            m_partitions.push_back(
-                std::make_unique<PartitionContext>(stateStore, symbolStats));
+            m_partitions.push_back(std::make_unique<PartitionContext>());
         }
     }
 
@@ -150,11 +146,66 @@ namespace mdp
             snapshot.failedEnqueueCount = queueMetrics.failedEnqueueCount;
             snapshot.acceptedCount = partition.acceptedCount.load();
             snapshot.processedCount = partition.processor.getMetrics().getProcessed();
+            snapshot.capacity = partition.queue.capacity();
 
             metrics.push_back(snapshot);
         }
 
         return metrics;
+    }
+
+    std::unordered_map<Symbol, SymbolState> WorkerPool::getStateSnapshot() const
+    {
+        std::unordered_map<Symbol, SymbolState> merged;
+
+        for (const auto& partition : m_partitions)
+        {
+            const auto snapshot = partition->processor.getStateSnapshot();
+            merged.insert(snapshot.begin(), snapshot.end());
+        }
+
+        return merged;
+    }
+
+    std::unordered_map<Symbol, SymbolStatistics> WorkerPool::getStatsSnapshot() const
+    {
+        std::unordered_map<Symbol, SymbolStatistics> merged;
+
+        for (const auto& partition : m_partitions)
+        {
+            const auto snapshot = partition->processor.getStatsSnapshot();
+
+            for (const auto& [symbol, stats] : snapshot)
+            {
+                SymbolStats::mergeInto(merged, symbol, stats);
+            }
+        }
+
+        return merged;
+    }
+
+    std::size_t WorkerPool::getTrackedStateSymbolCount() const
+    {
+        std::size_t total = 0;
+
+        for (const auto& partition : m_partitions)
+        {
+            total += partition->processor.getTrackedStateSymbolCount();
+        }
+
+        return total;
+    }
+
+    std::size_t WorkerPool::getTrackedStatsSymbolCount() const
+    {
+        std::size_t total = 0;
+
+        for (const auto& partition : m_partitions)
+        {
+            total += partition->processor.getTrackedStatsSymbolCount();
+        }
+
+        return total;
     }
 
     std::uint64_t WorkerPool::getAverageLatencyNs() const
@@ -289,6 +340,18 @@ namespace mdp
         for (const auto& p : m_partitions)
         {
             total += p->processor.getMetrics().getOutOfOrder();
+        }
+
+        return total;
+    }
+
+    std::uint64_t WorkerPool::getSequenceGapCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getSequenceGap();
         }
 
         return total;

@@ -16,4 +16,14 @@ namespace mdp
         std::cout << "[ALERT] Symbol=" << alert.symbol
             << " Message=" << alert.message << '\n';
     }
+
+    void ConsoleEventSink::publishStateChange(const StateChange& stateChange)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        std::cout << "[STATE] Symbol=" << stateChange.symbol
+            << " LastPrice=" << stateChange.currentState.lastPrice
+            << " LastVolume=" << stateChange.currentState.lastVolume
+            << " LastSequence=" << stateChange.currentState.lastSequenceNumber
+            << '\n';
+    }
 }

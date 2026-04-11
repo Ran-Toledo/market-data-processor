@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/MarketDataEvent.h"
+#include "pipeline/IEventRouter.h"
 #include "processing/EventProcessor.h"
 #include "processing/SymbolStateStore.h"
 #include "processing/SymbolStats.h"
@@ -10,11 +11,12 @@
 #include <cstddef>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace mdp
 {
-    class WorkerPool
+    class WorkerPool : public IEventRouter
     {
     public:
         struct PartitionMetrics
@@ -26,19 +28,17 @@ namespace mdp
             std::uint64_t failedEnqueueCount{ 0 };
             std::uint64_t acceptedCount{ 0 };
             std::uint64_t processedCount{ 0 };
+            std::size_t capacity{ 0 };
         };
 
     public:
-        WorkerPool(
-            std::size_t workerCount,
-            SymbolStateStore& stateStore,
-            SymbolStats& symbolStats);
+        explicit WorkerPool(std::size_t workerCount);
 
         ~WorkerPool();
 
         void start();
         void stop();
-        bool submit(const MarketDataEvent& event);
+        bool submit(const MarketDataEvent& event) override;
         void join();
 
         std::size_t getWorkerCount() const;
@@ -52,8 +52,13 @@ namespace mdp
         std::uint64_t getInvalidCount() const;
         std::uint64_t getDuplicateCount() const;
         std::uint64_t getOutOfOrderCount() const;
+        std::uint64_t getSequenceGapCount() const;
 
         std::vector<PartitionMetrics> getPartitionMetrics() const;
+        std::unordered_map<Symbol, SymbolState> getStateSnapshot() const;
+        std::unordered_map<Symbol, SymbolStatistics> getStatsSnapshot() const;
+        std::size_t getTrackedStateSymbolCount() const;
+        std::size_t getTrackedStatsSymbolCount() const;
 
     private:
         void workerLoop(std::size_t partitionIndex);
@@ -66,9 +71,10 @@ namespace mdp
             EventProcessor processor;
             std::atomic<std::uint64_t> acceptedCount{ 0 };
 
-            PartitionContext(SymbolStateStore& stateStore, SymbolStats& symbolStats)
-                : queue(config::workerQueueCapacity, config::workerQueueFullStrategy)
-                , processor(stateStore, symbolStats)
+            PartitionContext()
+                : queue(
+                    config::get().worker().workerQueueCapacity,
+                    config::get().worker().workerQueueFullStrategy)
             {
             }
         };

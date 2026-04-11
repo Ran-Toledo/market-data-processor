@@ -1,5 +1,4 @@
 #include "source/SyntheticMarketDataSource.h"
-#include "core/AppConfig.h"
 #include "util/Clock.h"
 
 #include <algorithm>
@@ -7,8 +6,6 @@
 #include <cstdio>
 #include <random>
 #include <string>
-#include <thread>
-#include <unordered_map>
 #include <vector>
 
 namespace mdp::source
@@ -120,15 +117,46 @@ namespace mdp::source
     }
 
     SyntheticMarketDataSource::SyntheticMarketDataSource()
+        : SyntheticMarketDataSource(0, 1)
     {
+    }
+
+    SyntheticMarketDataSource::SyntheticMarketDataSource(
+        std::size_t producerIndex,
+        std::size_t producerCount)
+        : m_symbolStates(kSymbolProfiles.size())
+    {
+        if (producerCount == 0)
+        {
+            producerCount = 1;
+        }
+
+        for (std::size_t symbolIndex = producerIndex;
+            symbolIndex < kSymbolProfiles.size();
+            symbolIndex += producerCount)
+        {
+            m_symbolIndexes.push_back(symbolIndex);
+        }
+
+        std::seed_seq seed
+        {
+            static_cast<unsigned int>(std::random_device{}()),
+            static_cast<unsigned int>(producerIndex),
+            static_cast<unsigned int>(producerCount)
+        };
+        m_generator.seed(seed);
+    }
+
+    std::size_t SyntheticMarketDataSource::getSymbolUniverseSize()
+    {
+        return kSymbolProfiles.size();
     }
 
     bool SyntheticMarketDataSource::next(MarketDataEvent& outEvent)
     {
-        if (config::sourceSleepMs > 0)
+        if (m_symbolIndexes.empty())
         {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(config::sourceSleepMs));
+            return false;
         }
 
         outEvent = generateEvent();
@@ -137,33 +165,31 @@ namespace mdp::source
 
     MarketDataEvent SyntheticMarketDataSource::generateEvent()
     {
-        static thread_local std::mt19937 generator(std::random_device{}());
-        static thread_local std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
+        std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
-            kSymbolProfiles.size() - 1);
-        static thread_local std::unordered_map<std::string, double> lastPriceBySymbol;
-        static thread_local std::unordered_map<std::string, SequenceNumber> nextSequenceBySymbol;
+            m_symbolIndexes.size() - 1);
 
-        const SymbolProfile& profile =
-            kSymbolProfiles[symbolIndexDistribution(generator)];
+        const std::size_t symbolIndex = m_symbolIndexes[symbolIndexDistribution(m_generator)];
+        const SymbolProfile& profile = kSymbolProfiles[symbolIndex];
+        SymbolRuntimeState& runtimeState = m_symbolStates[symbolIndex];
 
-        double& lastPrice = lastPriceBySymbol[profile.symbol];
-        if (lastPrice == 0.0)
+        if (runtimeState.lastPrice == 0.0)
         {
-            lastPrice = profile.basePrice;
+            runtimeState.lastPrice = profile.basePrice;
         }
 
-        lastPrice = generateNextPrice(lastPrice, profile, generator);
+        runtimeState.lastPrice =
+            generateNextPrice(runtimeState.lastPrice, profile, m_generator);
 
         MarketDataEvent event;
         event.symbol = profile.symbol;
-        event.price = lastPrice;
-        event.volume = generateVolume(generator);
+        event.price = runtimeState.lastPrice;
+        event.volume = generateVolume(m_generator);
 
         const TimestampNs timestampNs = clock::nowNs();
         event.exchangeTimestampNs = timestampNs;
         event.ingestTimestampNs = timestampNs;
-        event.sequenceNumber = ++nextSequenceBySymbol[event.symbol];
+        event.sequenceNumber = ++runtimeState.nextSequenceNumber;
 
         return event;
     }

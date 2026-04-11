@@ -3,6 +3,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 
 namespace mdp::config
 {
@@ -12,21 +14,77 @@ namespace mdp::config
         DropIncoming
     };
 
-    inline bool enableEventLogging = true;
-    inline bool enableAlertLogging = true;
-    inline bool enableProcessingStatsLogging = true;
+    struct LoggingConfig
+    {
+        bool enableEventLogging{ true };
+        bool enableAlertLogging{ true };
+        bool enableProcessingStatsLogging{ true };
+    };
 
-    inline std::size_t processingStatsLogInterval = 1000;
-    inline std::uint32_t sourceSleepMs = 1;
-    inline std::size_t appRuntimeMs = 10;
-    inline std::size_t numOfWorkers = 1;
+    struct RuntimeConfig
+    {
+        bool enableLoadTestMode{ false };
+        std::size_t appRuntimeSeconds{ 10 };
+        std::size_t numWorkers{ 1 };
+        std::size_t periodicSummaryIntervalMs{ 1000 };
+    };
 
-    inline std::size_t workerQueueCapacity = 1024;
-    inline QueueFullPolicy workerQueueFullStrategy = QueueFullPolicy::DropIncoming;
+    struct ProducerConfig
+    {
+        std::size_t producerCount{ 1 };
+        std::size_t producerBurstSize{ 1 };
+        std::uint32_t producerSleepUs{ 1000 };
+    };
 
-    inline std::size_t processingSpinIterations = 0;
+    struct WorkerConfig
+    {
+        std::uint32_t processingDelayUs{ 0 };
+        std::size_t optionalBusyWorkIterations{ 0 };
+        std::size_t workerQueueCapacity{ 1024 };
+        QueueFullPolicy workerQueueFullStrategy{ QueueFullPolicy::DropIncoming };
+    };
 
-    inline bool printProcessingStatsSummary = true;
-    inline bool printQueueMetricsSummary = true;
-    inline bool printSymbolStatsSummary = true;
+    struct ReportingConfig
+    {
+        std::size_t processingStatsLogInterval{ 1000 };
+        bool printProcessingStatsSummary{ true };
+        bool printQueueMetricsSummary{ true };
+        bool printSymbolStatsSummary{ true };
+    };
+
+    struct LoadTestConfig
+    {
+        std::size_t producerBurstSize{ 1 };
+        std::uint32_t producerSleepUs{ 0 };
+        std::uint32_t processingDelayUs{ 0 };
+        std::size_t optionalBusyWorkIterations{ 0 };
+        std::size_t workerQueueCapacity{ 1024 };
+    };
+
+    class AppConfig
+    {
+    public:
+        static AppConfig loadFromIni(const std::filesystem::path& filePath);
+
+        const LoggingConfig& logging() const { return m_logging; }
+        const RuntimeConfig& runtime() const { return m_runtime; }
+        const ProducerConfig& producer() const { return m_producer; }
+        const WorkerConfig& worker() const { return m_worker; }
+        const ReportingConfig& reporting() const { return m_reporting; }
+        const LoadTestConfig& loadTest() const { return m_loadTest; }
+
+    private:
+        void applyLoadTestOverrides();
+
+    private:
+        LoggingConfig m_logging;
+        RuntimeConfig m_runtime;
+        ProducerConfig m_producer;
+        WorkerConfig m_worker;
+        ReportingConfig m_reporting;
+        LoadTestConfig m_loadTest;
+    };
+
+    const AppConfig& get();
+    void loadFromFile(const std::filesystem::path& filePath);
 }

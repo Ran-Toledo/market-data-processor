@@ -1,18 +1,19 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
-#include "pipeline/WorkerPool.h"
+#include "pipeline/IEventRouter.h"
 #include "source/IMarketDataSource.h"
 
 #include <atomic>
+#include <memory>
 #include <thread>
+#include <vector>
 
 namespace mdp
 {
     class Producer
     {
     public:
-        Producer(IMarketDataSource& source, WorkerPool& workerPool);
+        explicit Producer(IEventRouter& eventRouter);
         ~Producer();
 
         void start();
@@ -20,15 +21,17 @@ namespace mdp
 
         std::size_t getProducedCount() const;
         std::size_t getRejectedCount() const;
+        std::size_t getActiveProducerCount() const;
 
     private:
-        void produceLoop();
+        void produceLoop(std::size_t producerIndex);
+        static std::vector<std::unique_ptr<IMarketDataSource>> createSources();
 
     private:
-        IMarketDataSource& m_source;
-        WorkerPool& m_workerPool;
+        std::vector<std::unique_ptr<IMarketDataSource>> m_sources;
+        IEventRouter& m_eventRouter;
 
-        std::thread m_workerThread;
+        std::vector<std::thread> m_workerThreads;
         std::atomic<bool> m_running{ false };
         std::atomic<std::size_t> m_producedCount{ 0 };
         std::atomic<std::size_t> m_rejectedCount{ 0 };
