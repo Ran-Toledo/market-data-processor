@@ -1,10 +1,7 @@
 #include "output/IEventSink.h"
 #include "processing/EventProcessor.h"
-#include "processing/SequenceTracker.h"
-#include "processing/SymbolStats.h"
 
 #include <cassert>
-#include <unordered_map>
 #include <vector>
 
 namespace
@@ -47,35 +44,6 @@ namespace
         std::vector<mdp::RuleAlert> alerts;
         std::vector<mdp::StateChange> stateChanges;
     };
-
-    void testSequenceTracker()
-    {
-        mdp::SequenceTracker tracker;
-
-        const auto first = tracker.evaluate("AAPL", 1);
-        assert(first.status == mdp::SequenceStatus::New);
-        assert(first.shouldProcess());
-
-        const auto duplicate = tracker.evaluate("AAPL", 1);
-        assert(duplicate.status == mdp::SequenceStatus::Duplicate);
-        assert(!duplicate.shouldProcess());
-        assert(duplicate.previousSequenceNumber == 1);
-        assert(duplicate.expectedSequenceNumber == 2);
-
-        const auto gap = tracker.evaluate("AAPL", 3);
-        assert(gap.status == mdp::SequenceStatus::Gap);
-        assert(gap.shouldProcess());
-        assert(gap.previousSequenceNumber == 1);
-        assert(gap.expectedSequenceNumber == 2);
-
-        const auto outOfOrder = tracker.evaluate("AAPL", 2);
-        assert(outOfOrder.status == mdp::SequenceStatus::OutOfOrder);
-        assert(!outOfOrder.shouldProcess());
-
-        const auto contiguous = tracker.evaluate("AAPL", 4);
-        assert(contiguous.status == mdp::SequenceStatus::New);
-        assert(contiguous.shouldProcess());
-    }
 
     void testEventProcessorSequencePolicy()
     {
@@ -129,39 +97,10 @@ namespace
 
         assert(sink.alerts.size() == 2);
     }
-
-    void testSymbolStatsAggregation()
-    {
-        mdp::SymbolStats stats;
-        stats.record(makeEvent(1, 10.0, 100, "AAPL"));
-        stats.record(makeEvent(2, 20.0, 200, "AAPL"));
-
-        const auto snapshot = stats.snapshot();
-        const auto it = snapshot.find("AAPL");
-        assert(it != snapshot.end());
-        assert(it->second.eventCount == 2);
-        assert(it->second.totalVolume == 300);
-        assert(it->second.minPrice == 10.0);
-        assert(it->second.maxPrice == 20.0);
-        assert(it->second.averagePrice == 15.0);
-
-        std::unordered_map<mdp::Symbol, mdp::SymbolStatistics> merged;
-        mdp::SymbolStats::mergeInto(merged, "AAPL", it->second);
-        mdp::SymbolStats::mergeInto(merged, "AAPL", it->second);
-
-        assert(merged["AAPL"].eventCount == 4);
-        assert(merged["AAPL"].totalVolume == 600);
-        assert(merged["AAPL"].minPrice == 10.0);
-        assert(merged["AAPL"].maxPrice == 20.0);
-        assert(merged["AAPL"].averagePrice == 15.0);
-    }
 }
 
-int main()
+void runEventProcessorTests()
 {
-    testSequenceTracker();
     testEventProcessorSequencePolicy();
     testEventProcessorAlerts();
-    testSymbolStatsAggregation();
-    return 0;
 }

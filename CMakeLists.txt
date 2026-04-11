@@ -52,7 +52,15 @@ target_include_directories(market_data_processor
 enable_testing()
 
 add_executable(market_data_processor_tests
-    tests/processing_tests.cpp
+    tests/main.cpp
+    tests/unit/EventProcessorTests.cpp
+    tests/unit/LatencyRecorderTests.cpp
+    tests/unit/MetricsCollectorTests.cpp
+    tests/unit/RiskRuleEvaluatorTests.cpp
+    tests/unit/SequenceTrackerTests.cpp
+    tests/unit/SymbolStateStoreTests.cpp
+    tests/unit/SymbolStatsTests.cpp
+    tests/integration/PipelineIntegrationTests.cpp
     ${MDP_LIBRARY_SOURCE_FILES}
     ${MDP_SRC_HEADER_FILES}
     ${MDP_INCLUDE_HEADER_FILES}
@@ -64,7 +72,14 @@ target_include_directories(market_data_processor_tests
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
-add_test(NAME market_data_processor_tests COMMAND market_data_processor_tests)
+add_test(NAME unit.sequence_tracker COMMAND market_data_processor_tests unit.sequence_tracker)
+add_test(NAME unit.event_processor COMMAND market_data_processor_tests unit.event_processor)
+add_test(NAME unit.latency_recorder COMMAND market_data_processor_tests unit.latency_recorder)
+add_test(NAME unit.metrics_collector COMMAND market_data_processor_tests unit.metrics_collector)
+add_test(NAME unit.risk_rule_evaluator COMMAND market_data_processor_tests unit.risk_rule_evaluator)
+add_test(NAME unit.symbol_stats COMMAND market_data_processor_tests unit.symbol_stats)
+add_test(NAME unit.symbol_state_store COMMAND market_data_processor_tests unit.symbol_state_store)
+add_test(NAME integration.pipeline COMMAND market_data_processor_tests integration.pipeline)
 
 # Compiler warnings
 if(MSVC)
