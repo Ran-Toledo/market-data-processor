@@ -52,4 +52,45 @@ namespace mdp
     {
         return m_symbolStats.size();
     }
+
+    void SymbolStats::mergeInto(
+        std::unordered_map<Symbol, SymbolStatistics>& target,
+        const Symbol& symbol,
+        const SymbolStatistics& sourceStats)
+    {
+        if (sourceStats.eventCount == 0)
+        {
+            return;
+        }
+
+        SymbolStatistics& targetStats = target[symbol];
+        if (targetStats.eventCount == 0)
+        {
+            targetStats = sourceStats;
+            return;
+        }
+
+        const std::size_t mergedEventCount =
+            targetStats.eventCount + sourceStats.eventCount;
+
+        targetStats.averagePrice =
+            ((targetStats.averagePrice * static_cast<double>(targetStats.eventCount)) +
+                (sourceStats.averagePrice * static_cast<double>(sourceStats.eventCount))) /
+            static_cast<double>(mergedEventCount);
+
+        targetStats.eventCount = mergedEventCount;
+        targetStats.totalVolume += sourceStats.totalVolume;
+
+        if (sourceStats.minPrice < targetStats.minPrice)
+        {
+            targetStats.minPrice = sourceStats.minPrice;
+        }
+
+        if (sourceStats.maxPrice > targetStats.maxPrice)
+        {
+            targetStats.maxPrice = sourceStats.maxPrice;
+        }
+
+        targetStats.lastPrice = sourceStats.lastPrice;
+    }
 }

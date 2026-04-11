@@ -2,6 +2,8 @@
 
 #include "metrics/LatencyRecorder.h"
 #include "metrics/MetricsCollector.h"
+#include "output/IEventSink.h"
+#include "processing/EventProcessingResult.h"
 #include "processing/RiskRuleEvaluator.h"
 #include "processing/SequenceTracker.h"
 #include "processing/SymbolStateStore.h"
@@ -13,8 +15,9 @@ namespace mdp
     {
     public:
         EventProcessor() = default;
+        explicit EventProcessor(IEventSink* eventSink);
 
-        void process(const MarketDataEvent& event);
+        EventProcessingResult process(const MarketDataEvent& event);
 
         const MetricsCollector& getMetrics() const { return m_metrics; }
         const LatencyRecorder& getLatency() const { return m_latency; }
@@ -25,7 +28,8 @@ namespace mdp
 
     private:
         void simulateProcessingLoad() const;
-        void logAlerts(const std::vector<RuleAlert>& alerts) const;
+        void publishAlerts(const std::vector<RuleAlert>& alerts) const;
+        void publishStateChange(const StateChange& stateChange) const;
 
     private:
         SymbolStateStore m_stateStore;
@@ -33,6 +37,7 @@ namespace mdp
 
         SequenceTracker m_sequenceTracker;
         RiskRuleEvaluator m_riskRuleEvaluator;
+        IEventSink* m_eventSink{ nullptr };
 
         MetricsCollector m_metrics;
         LatencyRecorder m_latency;

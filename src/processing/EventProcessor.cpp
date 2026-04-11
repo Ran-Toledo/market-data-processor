@@ -5,59 +5,95 @@
 #include "util/Clock.h"
 
 #include <chrono>
-#include <iostream>
 #include <thread>
 using namespace mdp::validation;
 
 namespace mdp
 {
-    void EventProcessor::process(const MarketDataEvent& event)
+    namespace
+    {
+        SymbolState makeState(const MarketDataEvent& event)
+        {
+            SymbolState state;
+            state.lastPrice = event.price;
+            state.lastVolume = event.volume;
+            state.lastExchangeTimestampNs = event.exchangeTimestampNs;
+            state.lastIngestTimestampNs = event.ingestTimestampNs;
+            state.lastSequenceNumber = event.sequenceNumber;
+            return state;
+        }
+    }
+
+    EventProcessor::EventProcessor(IEventSink* eventSink)
+        : m_eventSink(eventSink)
+    {
+    }
+
+    EventProcessingResult EventProcessor::process(const MarketDataEvent& event)
     {
         simulateProcessingLoad();
 
+        EventProcessingResult result;
+
         const ValidationResult validationResult = validate(event);
+        result.validation = validationResult;
         if (!validationResult.isValid)
         {
             m_metrics.onInvalid();
-            return;
+            return result;
         }
 
         m_metrics.onValid();
 
-        const auto seqStatus =
-            m_sequenceTracker.evaluate(event.symbol, event.sequenceNumber);
+        result.sequence = m_sequenceTracker.evaluate(event.symbol, event.sequenceNumber);
 
-        if (seqStatus == SequenceStatus::Duplicate)
+        if (result.sequence.status == SequenceStatus::Duplicate)
         {
             m_metrics.onDuplicate();
-            return;
+            return result;
         }
 
-        if (seqStatus == SequenceStatus::OutOfOrder)
+        if (result.sequence.status == SequenceStatus::OutOfOrder)
         {
             m_metrics.onOutOfOrder();
-            return;
+            return result;
+        }
+
+        if (result.sequence.status == SequenceStatus::Gap)
+        {
+            m_metrics.onSequenceGap();
         }
 
         const auto prev = m_stateStore.tryGet(event.symbol);
         const auto alerts = m_riskRuleEvaluator.evaluate(event, prev);
+        result.alerts = alerts;
+
+        StateChange stateChange;
+        stateChange.symbol = event.symbol;
+        stateChange.previousState = prev;
+        stateChange.currentState = makeState(event);
 
         m_stateStore.update(event);
         m_symbolStats.record(event);
+        result.stateChange = stateChange;
 
         const auto now = clock::nowNs();
         const auto latency =
             now >= event.ingestTimestampNs ? now - event.ingestTimestampNs : 0;
+        result.latencyNs = latency;
 
         m_latency.record(latency);
 
         if (!alerts.empty())
         {
             m_metrics.onAlerts(alerts.size());
-            logAlerts(alerts);
+            publishAlerts(alerts);
         }
 
+        publishStateChange(stateChange);
         m_metrics.onProcessed();
+        result.processed = true;
+        return result;
     }
 
     std::unordered_map<Symbol, SymbolState> EventProcessor::getStateSnapshot() const
@@ -98,30 +134,22 @@ namespace mdp
         }
     }
 
-    void EventProcessor::logAlerts(const std::vector<RuleAlert>& alerts) const
+    void EventProcessor::publishAlerts(const std::vector<RuleAlert>& alerts) const
     {
-        if (config::get().logging().enableAlertLogging)
+        if (m_eventSink != nullptr && config::get().logging().enableAlertLogging)
         {
             for (const RuleAlert& alert : alerts)
             {
-                std::cout << "Rule alert | symbol: " << alert.symbol
-                    << " | type: ";
-
-                switch (alert.type)
-                {
-                case RuleType::PriceJump:
-                    std::cout << "PriceJump";
-                    break;
-                case RuleType::LargeVolume:
-                    std::cout << "LargeVolume";
-                    break;
-                default:
-                    std::cout << "Unknown";
-                    break;
-                }
-
-                std::cout << " | message: " << alert.message << std::endl;
+                m_eventSink->publishAlert(alert);
             }
+        }
+    }
+
+    void EventProcessor::publishStateChange(const StateChange& stateChange) const
+    {
+        if (m_eventSink != nullptr && config::get().logging().enableEventLogging)
+        {
+            m_eventSink->publishStateChange(stateChange);
         }
     }
 }

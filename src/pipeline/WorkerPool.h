@@ -52,6 +52,7 @@ namespace mdp
         std::uint64_t getInvalidCount() const;
         std::uint64_t getDuplicateCount() const;
         std::uint64_t getOutOfOrderCount() const;
+        std::uint64_t getSequenceGapCount() const;
 
         std::vector<PartitionMetrics> getPartitionMetrics() const;
         std::unordered_map<Symbol, SymbolState> getStateSnapshot() const;

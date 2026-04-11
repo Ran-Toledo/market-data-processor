@@ -174,7 +174,11 @@ namespace mdp
         for (const auto& partition : m_partitions)
         {
             const auto snapshot = partition->processor.getStatsSnapshot();
-            merged.insert(snapshot.begin(), snapshot.end());
+
+            for (const auto& [symbol, stats] : snapshot)
+            {
+                SymbolStats::mergeInto(merged, symbol, stats);
+            }
         }
 
         return merged;
@@ -336,6 +340,18 @@ namespace mdp
         for (const auto& p : m_partitions)
         {
             total += p->processor.getMetrics().getOutOfOrder();
+        }
+
+        return total;
+    }
+
+    std::uint64_t WorkerPool::getSequenceGapCount() const
+    {
+        std::uint64_t total = 0;
+
+        for (const auto& p : m_partitions)
+        {
+            total += p->processor.getMetrics().getSequenceGap();
         }
 
         return total;

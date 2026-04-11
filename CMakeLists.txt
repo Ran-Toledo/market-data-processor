@@ -32,6 +32,9 @@ file(GLOB_RECURSE MDP_INCLUDE_HEADER_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
 )
 
+set(MDP_LIBRARY_SOURCE_FILES ${MDP_SOURCE_FILES})
+list(FILTER MDP_LIBRARY_SOURCE_FILES EXCLUDE REGEX ".*/main\\.cpp$")
+
 # Create executable
 add_executable(market_data_processor
     ${MDP_SOURCE_FILES}
@@ -45,6 +48,23 @@ target_include_directories(market_data_processor
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
+
+enable_testing()
+
+add_executable(market_data_processor_tests
+    tests/processing_tests.cpp
+    ${MDP_LIBRARY_SOURCE_FILES}
+    ${MDP_SRC_HEADER_FILES}
+    ${MDP_INCLUDE_HEADER_FILES}
+)
+
+target_include_directories(market_data_processor_tests
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+add_test(NAME market_data_processor_tests COMMAND market_data_processor_tests)
 
 # Compiler warnings
 if(MSVC)

@@ -11,6 +11,7 @@ namespace mdp
     public:
         void publishProcessedEvent(const MarketDataEvent& event) override;
         void publishAlert(const RuleAlert& alert) override;
+        void publishStateChange(const StateChange& stateChange) override;
 
     private:
         std::mutex m_mutex;

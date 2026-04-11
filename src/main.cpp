@@ -173,6 +173,7 @@ namespace
         std::cout << "Invalid events: " << workerPool.getInvalidCount() << std::endl;
         std::cout << "Duplicate events: " << workerPool.getDuplicateCount() << std::endl;
         std::cout << "Out-of-order events: " << workerPool.getOutOfOrderCount() << std::endl;
+        std::cout << "Sequence gaps: " << workerPool.getSequenceGapCount() << std::endl;
         std::cout << "Tracked symbols in worker-local state: "
             << workerPool.getTrackedStateSymbolCount() << std::endl;
         std::cout << "Tracked symbols in worker-local stats: "
