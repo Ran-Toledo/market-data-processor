@@ -34,6 +34,24 @@ python tools\analyze_performance_results.py --input results\performance-load-res
 The analyzer always writes a summary CSV. If `matplotlib` is installed, it also
 writes profile comparison plots and per-profile time-series plots.
 
+## Baseline Profile
+
+The tracked `baseline.ini` profile is tuned as a low-latency/high-throughput
+reference for the synthetic source on this machine:
+
+```ini
+num_workers = 2
+producer_count = 2
+producer_burst_size = 100
+processing_delay_us = 0
+optional_busy_work_iterations = 0
+queue_capacity = 1024
+queue_full_policy = drop_incoming
+```
+
+In a repeat-5 candidate run, this profile processed about 2.35M events/sec with
+zero drops and p99 latency in the 16us histogram bucket.
+
 ## Profile Coverage
 
 The profile files under `tests/perf/configs` cover:
