@@ -1,23 +1,16 @@
 #pragma once
 
 #include "core/AppConfig.h"
+#include "pipeline/QueueMetricsSnapshot.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
 #include <mutex>
-#include <atomic>
 
 namespace mdp
 {
-    struct QueueMetricsSnapshot
-    {
-        std::size_t currentDepth{ 0 };
-        std::size_t maxDepth{ 0 };
-        std::uint64_t droppedCount{ 0 };
-        std::uint64_t failedEnqueueCount{ 0 };
-    };
-
     template <typename T>
     class BoundedConcurrentQueue
     {
@@ -60,4 +53,4 @@ namespace mdp
     };
 }
 
-#include "containers/queue/BoundedConcurrentQueue.hpp"
+#include "pipeline/BoundedConcurrentQueue.hpp"

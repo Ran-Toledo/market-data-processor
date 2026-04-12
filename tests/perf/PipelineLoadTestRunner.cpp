@@ -17,7 +17,7 @@ namespace
 {
     struct RunnerOptions
     {
-        std::filesystem::path configPath;
+        std::vector<std::filesystem::path> configPaths;
         std::filesystem::path configDir;
         std::filesystem::path outputPath{ "results/performance-load-results.csv" };
         std::filesystem::path samplesOutputPath{ "results/performance-load-samples.csv" };
@@ -46,6 +46,7 @@ namespace
         std::size_t busyWorkIterations{ 0 };
         std::size_t workerQueueCapacity{ 0 };
         std::string queueFullPolicy;
+        std::string queueType;
         std::uint64_t eventsGenerated{ 0 };
         std::uint64_t eventsAccepted{ 0 };
         std::uint64_t eventsRejected{ 0 };
@@ -71,6 +72,10 @@ namespace
         std::uint64_t latencyP50Ns{ 0 };
         std::uint64_t latencyP95Ns{ 0 };
         std::uint64_t latencyP99Ns{ 0 };
+        std::uint64_t queueWaitAverageNs{ 0 };
+        std::uint64_t queueWaitP50Ns{ 0 };
+        std::uint64_t queueWaitP95Ns{ 0 };
+        std::uint64_t queueWaitP99Ns{ 0 };
     };
 
     struct IntervalSample
@@ -103,6 +108,10 @@ namespace
         std::uint64_t latencyP50Ns{ 0 };
         std::uint64_t latencyP95Ns{ 0 };
         std::uint64_t latencyP99Ns{ 0 };
+        std::uint64_t queueWaitSampleCount{ 0 };
+        std::uint64_t queueWaitP50Ns{ 0 };
+        std::uint64_t queueWaitP95Ns{ 0 };
+        std::uint64_t queueWaitP99Ns{ 0 };
     };
 
     struct CounterSnapshot
@@ -164,6 +173,19 @@ namespace
         return "unknown";
     }
 
+    std::string queueTypeToString(mdp::config::QueueType queueType)
+    {
+        switch (queueType)
+        {
+        case mdp::config::QueueType::BlockingBounded:
+            return "blocking_bounded";
+        case mdp::config::QueueType::LockFreeRing:
+            return "lock_free_ring";
+        }
+
+        return "unknown";
+    }
+
     void printUsage()
     {
         std::cout
@@ -195,7 +217,7 @@ namespace
 
             if (arg == "--config")
             {
-                options.configPath = value;
+                options.configPaths.push_back(value);
             }
             else if (arg == "--config-dir")
             {
@@ -223,7 +245,7 @@ namespace
             }
         }
 
-        if (options.configPath.empty() && options.configDir.empty())
+        if (options.configPaths.empty() && options.configDir.empty())
         {
             options.configDir = repoRoot() / "tests" / "perf" / "configs";
         }
@@ -237,9 +259,9 @@ namespace
     {
         std::vector<std::filesystem::path> configs;
 
-        if (!options.configPath.empty())
+        for (const auto& configPath : options.configPaths)
         {
-            configs.push_back(options.configPath);
+            configs.push_back(configPath);
         }
 
         if (!options.configDir.empty())
@@ -339,6 +361,8 @@ namespace
         CounterSnapshot previousCounters = getCounterSnapshot(producer, workerPool);
         mdp::LatencyRecorder::BucketSnapshot previousLatencyBuckets =
             workerPool.getLatencyBucketSnapshot();
+        mdp::LatencyRecorder::BucketSnapshot previousQueueWaitBuckets =
+            workerPool.getQueueWaitLatencyBucketSnapshot();
         auto previousTime = startTime;
 
         while (std::chrono::steady_clock::now() < endTime)
@@ -360,6 +384,12 @@ namespace
                 currentLatencyBuckets,
                 previousLatencyBuckets);
             const std::uint64_t latencyDeltaCount = sumLatencyBuckets(latencyDeltaBuckets);
+            const auto currentQueueWaitBuckets =
+                workerPool.getQueueWaitLatencyBucketSnapshot();
+            const auto queueWaitDeltaBuckets = subtractLatencyBuckets(
+                currentQueueWaitBuckets,
+                previousQueueWaitBuckets);
+            const std::uint64_t queueWaitDeltaCount = sumLatencyBuckets(queueWaitDeltaBuckets);
 
             IntervalSample sample;
             sample.profile = profile;
@@ -404,6 +434,19 @@ namespace
                 latencyDeltaBuckets,
                 latencyDeltaCount,
                 99.0);
+            sample.queueWaitSampleCount = queueWaitDeltaCount;
+            sample.queueWaitP50Ns = mdp::LatencyRecorder::percentileFromBuckets(
+                queueWaitDeltaBuckets,
+                queueWaitDeltaCount,
+                50.0);
+            sample.queueWaitP95Ns = mdp::LatencyRecorder::percentileFromBuckets(
+                queueWaitDeltaBuckets,
+                queueWaitDeltaCount,
+                95.0);
+            sample.queueWaitP99Ns = mdp::LatencyRecorder::percentileFromBuckets(
+                queueWaitDeltaBuckets,
+                queueWaitDeltaCount,
+                99.0);
 
             samples.push_back(sample);
 
@@ -414,6 +457,7 @@ namespace
 
             previousCounters = counters;
             previousLatencyBuckets = currentLatencyBuckets;
+            previousQueueWaitBuckets = currentQueueWaitBuckets;
             previousTime = now;
         }
 
@@ -467,6 +511,10 @@ namespace
         const std::uint64_t latencyP50Ns = workerPool.getPercentileLatencyNs(50.0);
         const std::uint64_t latencyP95Ns = workerPool.getPercentileLatencyNs(95.0);
         const std::uint64_t latencyP99Ns = workerPool.getPercentileLatencyNs(99.0);
+        const std::uint64_t queueWaitAverageNs = workerPool.getAverageQueueWaitLatencyNs();
+        const std::uint64_t queueWaitP50Ns = workerPool.getPercentileQueueWaitLatencyNs(50.0);
+        const std::uint64_t queueWaitP95Ns = workerPool.getPercentileQueueWaitLatencyNs(95.0);
+        const std::uint64_t queueWaitP99Ns = workerPool.getPercentileQueueWaitLatencyNs(99.0);
 
         producer.requestStop();
         workerPool.stop(false);
@@ -486,6 +534,7 @@ namespace
         result.busyWorkIterations = config.worker().optionalBusyWorkIterations;
         result.workerQueueCapacity = config.worker().workerQueueCapacity;
         result.queueFullPolicy = queuePolicyToString(config.worker().workerQueueFullStrategy);
+        result.queueType = queueTypeToString(config.worker().workerQueueType);
         result.eventsAccepted = acceptedCount;
         result.eventsRejected = rejectedCount;
         result.eventsGenerated = result.eventsAccepted + result.eventsRejected;
@@ -510,6 +559,10 @@ namespace
         result.latencyP50Ns = latencyP50Ns;
         result.latencyP95Ns = latencyP95Ns;
         result.latencyP99Ns = latencyP99Ns;
+        result.queueWaitAverageNs = queueWaitAverageNs;
+        result.queueWaitP50Ns = queueWaitP50Ns;
+        result.queueWaitP95Ns = queueWaitP95Ns;
+        result.queueWaitP99Ns = queueWaitP99Ns;
 
         for (const auto& metrics : partitionMetrics)
         {
@@ -528,13 +581,14 @@ namespace
         output
             << "profile,run,durationSec,workerCount,producerCount,activeProducerCount,"
             << "producerBurstSize,producerSleepUs,processingDelayUs,busyWorkIterations,"
-            << "workerQueueCapacity,queueFullPolicy,eventsGenerated,eventsAccepted,"
+            << "workerQueueCapacity,queueFullPolicy,queueType,eventsGenerated,eventsAccepted,"
             << "eventsRejected,eventsProcessed,validEvents,invalidEvents,duplicateEvents,"
             << "outOfOrderEvents,sequenceGaps,queueDropped,queueFailedEnqueue,"
             << "queueCurrentDepthTotal,queueMaxDepthSeen,queueMaxTotalDepthSampled,"
             << "queueCapacityTotal,nearCapacitySamplePercent,generatedPerSec,"
             << "acceptedPerSec,processedPerSec,latencyAverageNs,latencyMinNs,"
-            << "latencyMaxNs,latencyP50Ns,latencyP95Ns,latencyP99Ns\n";
+            << "latencyMaxNs,latencyP50Ns,latencyP95Ns,latencyP99Ns,"
+            << "queueWaitAverageNs,queueWaitP50Ns,queueWaitP95Ns,queueWaitP99Ns\n";
     }
 
     void writeIntervalSampleHeader(std::ostream& output)
@@ -547,7 +601,8 @@ namespace
             << "rejectedPerSec,processedPerSec,queueCurrentDepthTotal,"
             << "queueCapacityTotal,queueMaxDepthSeen,nearCapacityQueues,"
             << "queueDepthPercent,latencySampleCount,latencyP50Ns,latencyP95Ns,"
-            << "latencyP99Ns\n";
+            << "latencyP99Ns,queueWaitSampleCount,queueWaitP50Ns,queueWaitP95Ns,"
+            << "queueWaitP99Ns\n";
     }
 
     void writeCsvRow(std::ostream& output, const RunResult& result)
@@ -564,6 +619,7 @@ namespace
             << ',' << result.busyWorkIterations
             << ',' << result.workerQueueCapacity
             << ',' << result.queueFullPolicy
+            << ',' << result.queueType
             << ',' << result.eventsGenerated
             << ',' << result.eventsAccepted
             << ',' << result.eventsRejected
@@ -589,6 +645,10 @@ namespace
             << ',' << result.latencyP50Ns
             << ',' << result.latencyP95Ns
             << ',' << result.latencyP99Ns
+            << ',' << result.queueWaitAverageNs
+            << ',' << result.queueWaitP50Ns
+            << ',' << result.queueWaitP95Ns
+            << ',' << result.queueWaitP99Ns
             << '\n';
     }
 
@@ -622,6 +682,10 @@ namespace
             << ',' << sample.latencyP50Ns
             << ',' << sample.latencyP95Ns
             << ',' << sample.latencyP99Ns
+            << ',' << sample.queueWaitSampleCount
+            << ',' << sample.queueWaitP50Ns
+            << ',' << sample.queueWaitP95Ns
+            << ',' << sample.queueWaitP99Ns
             << '\n';
     }
 }

@@ -3,6 +3,7 @@
 
 void runSequenceTrackerTests();
 void runEventProcessorTests();
+void runEventQueueTests();
 void runLatencyRecorderTests();
 void runMetricsCollectorTests();
 void runRiskRuleEvaluatorTests();
@@ -23,6 +24,12 @@ namespace
         if (suiteName == "unit.event_processor")
         {
             runEventProcessorTests();
+            return true;
+        }
+
+        if (suiteName == "unit.event_queue")
+        {
+            runEventQueueTests();
             return true;
         }
 
@@ -84,6 +91,7 @@ int main(int argc, char** argv)
     {
         "unit.sequence_tracker",
         "unit.event_processor",
+        "unit.event_queue",
         "unit.latency_recorder",
         "unit.metrics_collector",
         "unit.risk_rule_evaluator",

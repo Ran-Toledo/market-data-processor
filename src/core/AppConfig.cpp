@@ -85,6 +85,23 @@ namespace mdp::config
 
             throw std::runtime_error("Invalid queue full policy: " + value);
         }
+
+        QueueType parseQueueType(const std::string& value)
+        {
+            const std::string normalized = toLower(trim(value));
+
+            if (normalized == "blockingbounded" || normalized == "blocking_bounded")
+            {
+                return QueueType::BlockingBounded;
+            }
+
+            if (normalized == "lockfreering" || normalized == "lock_free_ring")
+            {
+                return QueueType::LockFreeRing;
+            }
+
+            throw std::runtime_error("Invalid queue type: " + value);
+        }
     }
 
     AppConfig AppConfig::loadFromIni(const std::filesystem::path& filePath)
@@ -213,6 +230,10 @@ namespace mdp::config
                 {
                     config.m_worker.workerQueueFullStrategy = parseQueueFullPolicy(value);
                 }
+                else if (key == "queue_type")
+                {
+                    config.m_worker.workerQueueType = parseQueueType(value);
+                }
                 else
                 {
                     throw std::runtime_error(
@@ -267,6 +288,10 @@ namespace mdp::config
                 {
                     config.m_loadTest.workerQueueCapacity = parseSize(value);
                 }
+                else if (key == "queue_type")
+                {
+                    config.m_loadTest.workerQueueType = parseQueueType(value);
+                }
                 else
                 {
                     throw std::runtime_error(
@@ -297,6 +322,7 @@ namespace mdp::config
         m_worker.processingDelayUs = m_loadTest.processingDelayUs;
         m_worker.optionalBusyWorkIterations = m_loadTest.optionalBusyWorkIterations;
         m_worker.workerQueueCapacity = m_loadTest.workerQueueCapacity;
+        m_worker.workerQueueType = m_loadTest.workerQueueType;
     }
 
     const AppConfig& get()

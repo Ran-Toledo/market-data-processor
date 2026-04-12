@@ -34,6 +34,10 @@ NUMERIC_FIELDS = [
     "latencyP50Ns",
     "latencyP95Ns",
     "latencyP99Ns",
+    "queueWaitAverageNs",
+    "queueWaitP50Ns",
+    "queueWaitP95Ns",
+    "queueWaitP99Ns",
 ]
 
 SAMPLE_NUMERIC_FIELDS = [
@@ -64,6 +68,10 @@ SAMPLE_NUMERIC_FIELDS = [
     "latencyP50Ns",
     "latencyP95Ns",
     "latencyP99Ns",
+    "queueWaitSampleCount",
+    "queueWaitP50Ns",
+    "queueWaitP95Ns",
+    "queueWaitP99Ns",
 ]
 
 
@@ -79,6 +87,7 @@ SUMMARY_FIELDS = [
     "busyWorkIterations",
     "workerQueueCapacity",
     "queueFullPolicy",
+    "queueType",
     "generatedPerSec_mean",
     "acceptedPerSec_mean",
     "processedPerSec_mean",
@@ -91,6 +100,9 @@ SUMMARY_FIELDS = [
     "latencyP50Ns_mean",
     "latencyP95Ns_mean",
     "latencyP99Ns_mean",
+    "queueWaitP50Ns_mean",
+    "queueWaitP95Ns_mean",
+    "queueWaitP99Ns_mean",
 ]
 
 
@@ -180,6 +192,7 @@ def summarize(rows):
                 "busyWorkIterations": int(first["busyWorkIterations"]),
                 "workerQueueCapacity": int(first["workerQueueCapacity"]),
                 "queueFullPolicy": first["queueFullPolicy"],
+                "queueType": first.get("queueType", "unknown"),
                 "generatedPerSec_mean": mean(profile_rows, "generatedPerSec"),
                 "acceptedPerSec_mean": mean(profile_rows, "acceptedPerSec"),
                 "processedPerSec_mean": mean(profile_rows, "processedPerSec"),
@@ -192,6 +205,9 @@ def summarize(rows):
                 "latencyP50Ns_mean": mean(profile_rows, "latencyP50Ns"),
                 "latencyP95Ns_mean": mean(profile_rows, "latencyP95Ns"),
                 "latencyP99Ns_mean": mean(profile_rows, "latencyP99Ns"),
+                "queueWaitP50Ns_mean": mean(profile_rows, "queueWaitP50Ns"),
+                "queueWaitP95Ns_mean": mean(profile_rows, "queueWaitP95Ns"),
+                "queueWaitP99Ns_mean": mean(profile_rows, "queueWaitP99Ns"),
             }
         )
 
@@ -239,6 +255,7 @@ def plot_summary(summary_rows, plots_dir):
     save_bar_chart("generatedPerSec_mean", "Generated throughput by profile", "events/sec", "generated_throughput.png")
     save_bar_chart("nearCapacitySamplePercent_mean", "Queue near-capacity samples", "percent", "queue_near_capacity.png")
     save_bar_chart("latencyP99Ns_mean", "P99 latency by profile", "nanoseconds", "latency_p99.png")
+    save_bar_chart("queueWaitP99Ns_mean", "P99 queue wait by profile", "nanoseconds", "queue_wait_p99.png")
 
 
 def sanitize_filename(value):
@@ -294,6 +311,16 @@ def plot_time_series(sample_rows, plots_dir):
         axes[3].set_ylabel("interval count")
         axes[3].set_xlabel("elapsed seconds")
         axes[3].legend(loc="best")
+
+        if "queueWaitP99Ns" in rows[0]:
+            queue_wait_axis = axes[2].twinx()
+            queue_wait_axis.plot(
+                elapsed,
+                [row["queueWaitP99Ns"] for row in rows],
+                label="queue wait p99",
+                color="tab:red",
+                linestyle="--")
+            queue_wait_axis.set_ylabel("queue wait ns")
 
         for axis in axes:
             axis.grid(True, alpha=0.3)

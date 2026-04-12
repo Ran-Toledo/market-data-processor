@@ -47,6 +47,7 @@ processing_delay_us = 0
 optional_busy_work_iterations = 0
 queue_capacity = 1024
 queue_full_policy = drop_incoming
+queue_type = blocking_bounded
 ```
 
 In a repeat-5 candidate run, this profile processed about 2.35M events/sec with
@@ -63,6 +64,7 @@ The profile files under `tests/perf/configs` cover:
 - CPU-style processing work: 0, 100, 1000, and 10000 busy-work iterations
 - Burst pressure: 1, 10, 100, and 1000 events per 100 microsecond sleep cycle
 - Queue full policy comparison between `block_producer` and `drop_incoming`
+- Queue implementation comparison between `blocking_bounded` and `lock_free_ring`
 
 Most scaling and backpressure profiles use `optional_busy_work_iterations = 1000`
 and `processing_delay_us = 0`. That keeps comparisons CPU-bound and avoids
@@ -77,6 +79,7 @@ Each run writes one CSV row with the key input parameters and results:
 - Generated, accepted, rejected, and processed event counts
 - Generated/sec, accepted/sec, and processed/sec
 - Queue drops, failed enqueue attempts, max depth, and near-capacity samples
+- Queue implementation and queue-wait p50, p95, and p99 latency
 - Validation counts including invalid, duplicate, out-of-order, and sequence gap events
 - Average, min, max, p50, p95, and p99 latency in nanoseconds
 
@@ -86,6 +89,7 @@ The runner also writes an interval samples CSV. Each sample includes:
 - Current queue depth, total queue capacity, max queue depth seen, and near-capacity queues
 - Rejections, queue drops, failed enqueue attempts, sequence gaps, and duplicate events for the interval
 - Per-interval p50, p95, and p99 latency in nanoseconds
+- Per-interval p50, p95, and p99 queue-wait latency in nanoseconds
 
 Latency percentiles are calculated in the C++ metrics path from a lightweight
 atomic histogram. Final run summaries use cumulative histograms. Interval

@@ -194,6 +194,10 @@ namespace
             << workerPool.getPercentileLatencyNs(95.0) << " ns" << std::endl;
         std::cout << "P99 latency: "
             << workerPool.getPercentileLatencyNs(99.0) << " ns" << std::endl;
+        std::cout << "Average queue wait: "
+            << workerPool.getAverageQueueWaitLatencyNs() << " ns" << std::endl;
+        std::cout << "P99 queue wait: "
+            << workerPool.getPercentileQueueWaitLatencyNs(99.0) << " ns" << std::endl;
     }
 
     void printQueueSummary(const mdp::WorkerPool& workerPool)

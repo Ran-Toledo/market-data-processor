@@ -21,6 +21,7 @@ namespace mdp
 
         const MetricsCollector& getMetrics() const { return m_metrics; }
         const LatencyRecorder& getLatency() const { return m_latency; }
+        const LatencyRecorder& getQueueWaitLatency() const { return m_queueWaitLatency; }
         std::unordered_map<Symbol, SymbolState> getStateSnapshot() const;
         std::unordered_map<Symbol, SymbolStatistics> getStatsSnapshot() const;
         std::size_t getTrackedStateSymbolCount() const;
@@ -41,5 +42,6 @@ namespace mdp
 
         MetricsCollector m_metrics;
         LatencyRecorder m_latency;
+        LatencyRecorder m_queueWaitLatency;
     };
 }

@@ -54,6 +54,7 @@ enable_testing()
 add_executable(market_data_processor_tests
     tests/main.cpp
     tests/unit/EventProcessorTests.cpp
+    tests/unit/EventQueueTests.cpp
     tests/unit/LatencyRecorderTests.cpp
     tests/unit/MetricsCollectorTests.cpp
     tests/unit/RiskRuleEvaluatorTests.cpp
@@ -87,6 +88,7 @@ target_include_directories(pipeline_load_experiments
 
 add_test(NAME unit.sequence_tracker COMMAND market_data_processor_tests unit.sequence_tracker)
 add_test(NAME unit.event_processor COMMAND market_data_processor_tests unit.event_processor)
+add_test(NAME unit.event_queue COMMAND market_data_processor_tests unit.event_queue)
 add_test(NAME unit.latency_recorder COMMAND market_data_processor_tests unit.latency_recorder)
 add_test(NAME unit.metrics_collector COMMAND market_data_processor_tests unit.metrics_collector)
 add_test(NAME unit.risk_rule_evaluator COMMAND market_data_processor_tests unit.risk_rule_evaluator)

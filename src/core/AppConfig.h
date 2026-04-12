@@ -14,6 +14,12 @@ namespace mdp::config
         DropIncoming
     };
 
+    enum class QueueType
+    {
+        BlockingBounded,
+        LockFreeRing
+    };
+
     struct LoggingConfig
     {
         bool enableEventLogging{ true };
@@ -42,6 +48,7 @@ namespace mdp::config
         std::size_t optionalBusyWorkIterations{ 0 };
         std::size_t workerQueueCapacity{ 1024 };
         QueueFullPolicy workerQueueFullStrategy{ QueueFullPolicy::DropIncoming };
+        QueueType workerQueueType{ QueueType::BlockingBounded };
     };
 
     struct ReportingConfig
@@ -59,6 +66,7 @@ namespace mdp::config
         std::uint32_t processingDelayUs{ 0 };
         std::size_t optionalBusyWorkIterations{ 0 };
         std::size_t workerQueueCapacity{ 1024 };
+        QueueType workerQueueType{ QueueType::BlockingBounded };
     };
 
     class AppConfig

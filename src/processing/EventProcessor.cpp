@@ -31,6 +31,12 @@ namespace mdp
 
     EventProcessingResult EventProcessor::process(const MarketDataEvent& event)
     {
+        const auto processingStartNs = clock::nowNs();
+        if (event.enqueueTimestampNs > 0 && processingStartNs >= event.enqueueTimestampNs)
+        {
+            m_queueWaitLatency.record(processingStartNs - event.enqueueTimestampNs);
+        }
+
         simulateProcessingLoad();
 
         EventProcessingResult result;
