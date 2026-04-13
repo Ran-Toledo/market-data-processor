@@ -5,7 +5,7 @@
 
 #include <cstddef>
 
-namespace mdp
+namespace mdp::pipeline
 {
     class IEventQueue
     {

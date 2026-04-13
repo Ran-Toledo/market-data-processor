@@ -1,6 +1,6 @@
 #pragma once
 
-namespace mdp
+namespace mdp::pipeline
 {
     template <typename T>
     BoundedConcurrentQueue<T>::BoundedConcurrentQueue(

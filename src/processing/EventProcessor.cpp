@@ -6,9 +6,9 @@
 
 #include <chrono>
 #include <thread>
-using namespace mdp::validation;
+using namespace mdp::processing::validation;
 
-namespace mdp
+namespace mdp::processing
 {
     namespace
     {
@@ -24,7 +24,7 @@ namespace mdp
         }
     }
 
-    EventProcessor::EventProcessor(IEventSink* eventSink)
+    EventProcessor::EventProcessor(output::IEventSink* eventSink)
         : m_eventSink(eventSink)
     {
     }

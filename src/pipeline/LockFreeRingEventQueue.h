@@ -9,7 +9,7 @@
 #include <thread>
 #include <vector>
 
-namespace mdp
+namespace mdp::pipeline
 {
     class LockFreeRingEventQueue final : public IEventQueue
     {

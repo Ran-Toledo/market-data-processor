@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace mdp
+namespace mdp::pipeline
 {
     LockFreeRingEventQueue::LockFreeRingEventQueue(
         std::size_t capacity,

@@ -35,19 +35,19 @@ namespace
         return static_cast<double>(count) / elapsedSeconds;
     }
 
-    bool isNearCapacity(const mdp::WorkerPool::PartitionMetrics& metrics)
+    bool isNearCapacity(const mdp::pipeline::WorkerPool::PartitionMetrics& metrics)
     {
         return metrics.capacity > 0 &&
             (metrics.currentDepth * 10 >= metrics.capacity * 9);
     }
 
-    bool reachedNearCapacity(const mdp::WorkerPool::PartitionMetrics& metrics)
+    bool reachedNearCapacity(const mdp::pipeline::WorkerPool::PartitionMetrics& metrics)
     {
         return metrics.capacity > 0 &&
             (metrics.maxDepth * 10 >= metrics.capacity * 9);
     }
 
-    void printProducerMode(const mdp::Producer& producer)
+    void printProducerMode(const mdp::pipeline::Producer& producer)
     {
         if (mdp::config::get().producer().producerCount != producer.getActiveProducerCount())
         {
@@ -59,8 +59,8 @@ namespace
     }
 
     void printPeriodicSummary(
-        const mdp::Producer& producer,
-        const mdp::WorkerPool& workerPool,
+        const mdp::pipeline::Producer& producer,
+        const mdp::pipeline::WorkerPool& workerPool,
         ThroughputSample& previousSample,
         const std::chrono::steady_clock::time_point& previousTime,
         const std::chrono::steady_clock::time_point& currentTime)
@@ -115,7 +115,7 @@ namespace
         previousSample.processedCount = processedCount;
     }
 
-    void runForConfiguredDuration(mdp::Producer& producer, const mdp::WorkerPool& workerPool)
+    void runForConfiguredDuration(mdp::pipeline::Producer& producer, const mdp::pipeline::WorkerPool& workerPool)
     {
         const auto startTime = std::chrono::steady_clock::now();
         const auto endTime =
@@ -151,8 +151,8 @@ namespace
     }
 
     void printProcessingSummary(
-        const mdp::Producer& producer,
-        const mdp::WorkerPool& workerPool,
+        const mdp::pipeline::Producer& producer,
+        const mdp::pipeline::WorkerPool& workerPool,
         double elapsedSeconds)
     {
         if (!mdp::config::get().reporting().printProcessingStatsSummary)
@@ -200,7 +200,7 @@ namespace
             << workerPool.getPercentileQueueWaitLatencyNs(99.0) << " ns" << std::endl;
     }
 
-    void printQueueSummary(const mdp::WorkerPool& workerPool)
+    void printQueueSummary(const mdp::pipeline::WorkerPool& workerPool)
     {
         if (!mdp::config::get().reporting().printQueueMetricsSummary)
         {
@@ -224,7 +224,7 @@ namespace
         }
     }
 
-    void printSymbolSummary(const mdp::WorkerPool& workerPool)
+    void printSymbolSummary(const mdp::pipeline::WorkerPool& workerPool)
     {
         if (!mdp::config::get().reporting().printSymbolStatsSummary)
         {
@@ -246,7 +246,7 @@ namespace
             const auto statsIt = statsSnapshot.find(symbol);
             if (statsIt != statsSnapshot.end())
             {
-                const mdp::SymbolStatistics& stats = statsIt->second;
+                const mdp::processing::SymbolStatistics& stats = statsIt->second;
 
                 std::cout << "  Event count: " << stats.eventCount << '\n';
                 std::cout << "  Total volume: " << stats.totalVolume << '\n';
@@ -264,8 +264,8 @@ int main()
 {
     mdp::config::loadFromFile(getConfigPath());
 
-    mdp::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
-    mdp::Producer producer(workerPool);
+    mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
+    mdp::pipeline::Producer producer(workerPool);
 
     printProducerMode(producer);
     std::cout << "Starting pipeline..." << std::endl;

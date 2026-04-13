@@ -4,7 +4,7 @@
 
 #include <unordered_map>
 
-namespace mdp
+namespace mdp::processing
 {
     enum class SequenceStatus
     {

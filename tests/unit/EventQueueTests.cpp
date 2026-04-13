@@ -17,7 +17,7 @@ namespace
         return event;
     }
 
-    void assertDropIncomingBehavior(mdp::IEventQueue& queue)
+    void assertDropIncomingBehavior(mdp::pipeline::IEventQueue& queue)
     {
         assert(queue.push(makeEvent(1)));
         assert(queue.push(makeEvent(2)));
@@ -43,21 +43,21 @@ namespace
 void runEventQueueTests()
 {
     {
-        mdp::BlockingBoundedEventQueue queue(
+        mdp::pipeline::BlockingBoundedEventQueue queue(
             2,
             mdp::config::QueueFullPolicy::DropIncoming);
         assertDropIncomingBehavior(queue);
     }
 
     {
-        mdp::LockFreeRingEventQueue queue(
+        mdp::pipeline::LockFreeRingEventQueue queue(
             2,
             mdp::config::QueueFullPolicy::DropIncoming);
         assertDropIncomingBehavior(queue);
     }
 
     {
-        mdp::LockFreeRingEventQueue queue(
+        mdp::pipeline::LockFreeRingEventQueue queue(
             2,
             mdp::config::QueueFullPolicy::DropIncoming);
         assert(queue.push(makeEvent(1)));

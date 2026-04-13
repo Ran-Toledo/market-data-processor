@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-namespace mdp
+namespace mdp::pipeline
 {
     class Producer
     {
@@ -27,10 +27,10 @@ namespace mdp
 
     private:
         void produceLoop(std::size_t producerIndex);
-        static std::vector<std::unique_ptr<IMarketDataSource>> createSources();
+        static std::vector<std::unique_ptr<source::IMarketDataSource>> createSources();
 
     private:
-        std::vector<std::unique_ptr<IMarketDataSource>> m_sources;
+        std::vector<std::unique_ptr<source::IMarketDataSource>> m_sources;
         IEventRouter& m_eventRouter;
 
         std::vector<std::thread> m_workerThreads;

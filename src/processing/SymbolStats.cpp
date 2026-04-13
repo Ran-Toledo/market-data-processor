@@ -1,7 +1,7 @@
 // SymbolStats.cpp
 #include "processing/SymbolStats.h"
 
-namespace mdp
+namespace mdp::processing
 {
     void SymbolStats::record(const MarketDataEvent& event)
     {

@@ -28,7 +28,7 @@ namespace
 
 void runPipelineIntegrationTests()
 {
-    mdp::EventProcessor processor;
+    mdp::processing::EventProcessor processor;
 
     const auto first = processor.process(makeEvent(1, 100.0, 10));
     const auto second = processor.process(makeEvent(2, 105.0, 20));
@@ -61,8 +61,8 @@ void runPipelineIntegrationTests()
         / "queue_policy_block_overload.ini";
     mdp::config::loadFromFile(configPath);
 
-    mdp::WorkerPool workerPool(2);
-    mdp::Producer producer(workerPool);
+    mdp::pipeline::WorkerPool workerPool(2);
+    mdp::pipeline::Producer producer(workerPool);
 
     workerPool.start();
     producer.start();

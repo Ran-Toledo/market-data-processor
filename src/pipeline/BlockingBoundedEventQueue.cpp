@@ -1,6 +1,6 @@
 #include "pipeline/BlockingBoundedEventQueue.h"
 
-namespace mdp
+namespace mdp::pipeline
 {
     BlockingBoundedEventQueue::BlockingBoundedEventQueue(
         std::size_t capacity,

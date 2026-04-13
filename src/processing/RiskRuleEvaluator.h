@@ -7,7 +7,7 @@
 #include <optional>
 #include <vector>
 
-namespace mdp
+namespace mdp::processing
 {
     class RiskRuleEvaluator
     {

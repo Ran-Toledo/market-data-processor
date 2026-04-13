@@ -3,7 +3,7 @@
 #include "pipeline/IEventQueue.h"
 #include "pipeline/BoundedConcurrentQueue.h"
 
-namespace mdp
+namespace mdp::pipeline
 {
     class BlockingBoundedEventQueue final : public IEventQueue
     {

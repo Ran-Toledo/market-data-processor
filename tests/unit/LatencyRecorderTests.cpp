@@ -4,7 +4,7 @@
 
 void runLatencyRecorderTests()
 {
-    mdp::LatencyRecorder recorder;
+    mdp::metrics::LatencyRecorder recorder;
 
     assert(recorder.getCount() == 0);
     assert(recorder.getAverageLatencyNs() == 0);

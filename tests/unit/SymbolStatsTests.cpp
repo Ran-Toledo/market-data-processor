@@ -24,7 +24,7 @@ namespace
 
 void runSymbolStatsTests()
 {
-    mdp::SymbolStats stats;
+    mdp::processing::SymbolStats stats;
     stats.record(makeEvent(1, 10.0, 100));
     stats.record(makeEvent(2, 20.0, 200));
     stats.record(makeEvent(3, 15.0, 300));
@@ -39,9 +39,9 @@ void runSymbolStatsTests()
     assert(it->second.lastPrice == 15.0);
     assert(it->second.averagePrice == 15.0);
 
-    std::unordered_map<mdp::Symbol, mdp::SymbolStatistics> merged;
-    mdp::SymbolStats::mergeInto(merged, "AAPL", it->second);
-    mdp::SymbolStats::mergeInto(merged, "AAPL", it->second);
+    std::unordered_map<mdp::Symbol, mdp::processing::SymbolStatistics> merged;
+    mdp::processing::SymbolStats::mergeInto(merged, "AAPL", it->second);
+    mdp::processing::SymbolStats::mergeInto(merged, "AAPL", it->second);
 
     assert(merged["AAPL"].eventCount == 6);
     assert(merged["AAPL"].totalVolume == 1200);

@@ -5,7 +5,7 @@
 #include <optional>
 #include <unordered_map>
 
-namespace mdp
+namespace mdp::processing
 {
     struct SymbolState
     {

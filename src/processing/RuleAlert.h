@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace mdp
+namespace mdp::processing
 {
     enum class RuleType
     {

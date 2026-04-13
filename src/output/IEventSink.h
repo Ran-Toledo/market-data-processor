@@ -4,7 +4,7 @@
 #include "processing/RuleAlert.h"
 #include "processing/StateChange.h"
 
-namespace mdp
+namespace mdp::output
 {
     class IEventSink
     {
@@ -12,7 +12,7 @@ namespace mdp
         virtual ~IEventSink() = default;
 
         virtual void publishProcessedEvent(const MarketDataEvent& event) = 0;
-        virtual void publishAlert(const RuleAlert& alert) = 0;
-        virtual void publishStateChange(const StateChange& stateChange) = 0;
+        virtual void publishAlert(const processing::RuleAlert& alert) = 0;
+        virtual void publishStateChange(const processing::StateChange& stateChange) = 0;
     };
 }

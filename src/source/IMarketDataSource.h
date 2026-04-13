@@ -3,7 +3,7 @@
 
 #include "core/MarketDataEvent.h"
 
-namespace mdp
+namespace mdp::source
 {
     class IMarketDataSource
     {

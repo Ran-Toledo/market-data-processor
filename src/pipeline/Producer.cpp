@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace mdp
+namespace mdp::pipeline
 {
     Producer::Producer(IEventRouter& eventRouter)
         : m_sources(createSources())
@@ -81,7 +81,7 @@ namespace mdp
 
     void Producer::produceLoop(std::size_t producerIndex)
     {
-        IMarketDataSource& source = *m_sources[producerIndex];
+        source::IMarketDataSource& source = *m_sources[producerIndex];
 
         while (m_running.load())
         {
@@ -139,7 +139,7 @@ namespace mdp
         }
     }
 
-    std::vector<std::unique_ptr<IMarketDataSource>> Producer::createSources()
+    std::vector<std::unique_ptr<source::IMarketDataSource>> Producer::createSources()
     {
         const std::size_t configuredProducerCount =
             std::max<std::size_t>(1, config::get().producer().producerCount);
@@ -147,7 +147,7 @@ namespace mdp
             configuredProducerCount,
             source::SyntheticMarketDataSource::getSymbolUniverseSize());
 
-        std::vector<std::unique_ptr<IMarketDataSource>> sources;
+        std::vector<std::unique_ptr<source::IMarketDataSource>> sources;
         sources.reserve(activeProducerCount);
 
         for (std::size_t i = 0; i < activeProducerCount; ++i)

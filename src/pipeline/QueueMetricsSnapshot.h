@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace mdp
+namespace mdp::pipeline
 {
     struct QueueMetricsSnapshot
     {

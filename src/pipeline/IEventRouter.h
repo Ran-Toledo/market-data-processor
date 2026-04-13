@@ -2,7 +2,7 @@
 
 #include "core/MarketDataEvent.h"
 
-namespace mdp
+namespace mdp::pipeline
 {
     class IEventRouter
     {

@@ -8,8 +8,14 @@
 #include <limits>
 #include <stdexcept>
 
-namespace mdp
+namespace mdp::pipeline
 {
+    using metrics::LatencyRecorder;
+    using processing::EventProcessor;
+    using processing::SymbolState;
+    using processing::SymbolStatistics;
+    using processing::SymbolStats;
+
     namespace
     {
         std::unique_ptr<IEventQueue> createEventQueue()

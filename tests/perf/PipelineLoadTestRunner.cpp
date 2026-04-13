@@ -154,7 +154,7 @@ namespace
         return static_cast<double>(count) / elapsedSeconds;
     }
 
-    bool isNearCapacity(const mdp::WorkerPool::PartitionMetrics& metrics)
+    bool isNearCapacity(const mdp::pipeline::WorkerPool::PartitionMetrics& metrics)
     {
         return metrics.capacity > 0 &&
             (metrics.currentDepth * 10 >= metrics.capacity * 9);
@@ -279,7 +279,7 @@ namespace
         return configs;
     }
 
-    std::uint64_t sumLatencyBuckets(const mdp::LatencyRecorder::BucketSnapshot& buckets)
+    std::uint64_t sumLatencyBuckets(const mdp::metrics::LatencyRecorder::BucketSnapshot& buckets)
     {
         std::uint64_t total = 0;
 
@@ -291,11 +291,11 @@ namespace
         return total;
     }
 
-    mdp::LatencyRecorder::BucketSnapshot subtractLatencyBuckets(
-        const mdp::LatencyRecorder::BucketSnapshot& current,
-        const mdp::LatencyRecorder::BucketSnapshot& previous)
+    mdp::metrics::LatencyRecorder::BucketSnapshot subtractLatencyBuckets(
+        const mdp::metrics::LatencyRecorder::BucketSnapshot& current,
+        const mdp::metrics::LatencyRecorder::BucketSnapshot& previous)
     {
-        mdp::LatencyRecorder::BucketSnapshot delta{};
+        mdp::metrics::LatencyRecorder::BucketSnapshot delta{};
 
         for (std::size_t i = 0; i < current.size(); ++i)
         {
@@ -305,7 +305,7 @@ namespace
         return delta;
     }
 
-    QueueTotals getQueueTotals(const mdp::WorkerPool& workerPool)
+    QueueTotals getQueueTotals(const mdp::pipeline::WorkerPool& workerPool)
     {
         QueueTotals totals;
         const auto partitionMetrics = workerPool.getPartitionMetrics();
@@ -328,8 +328,8 @@ namespace
     }
 
     CounterSnapshot getCounterSnapshot(
-        const mdp::Producer& producer,
-        const mdp::WorkerPool& workerPool)
+        const mdp::pipeline::Producer& producer,
+        const mdp::pipeline::WorkerPool& workerPool)
     {
         const QueueTotals queueTotals = getQueueTotals(workerPool);
         CounterSnapshot snapshot;
@@ -350,8 +350,8 @@ namespace
     QueueSampleStats collectIntervalSamples(
         const std::string& profile,
         std::size_t runIndex,
-        const mdp::Producer& producer,
-        const mdp::WorkerPool& workerPool,
+        const mdp::pipeline::Producer& producer,
+        const mdp::pipeline::WorkerPool& workerPool,
         std::chrono::steady_clock::time_point startTime,
         std::chrono::steady_clock::time_point endTime,
         std::size_t sampleIntervalMs,
@@ -359,9 +359,9 @@ namespace
     {
         QueueSampleStats queueSampleStats;
         CounterSnapshot previousCounters = getCounterSnapshot(producer, workerPool);
-        mdp::LatencyRecorder::BucketSnapshot previousLatencyBuckets =
+        mdp::metrics::LatencyRecorder::BucketSnapshot previousLatencyBuckets =
             workerPool.getLatencyBucketSnapshot();
-        mdp::LatencyRecorder::BucketSnapshot previousQueueWaitBuckets =
+        mdp::metrics::LatencyRecorder::BucketSnapshot previousQueueWaitBuckets =
             workerPool.getQueueWaitLatencyBucketSnapshot();
         auto previousTime = startTime;
 
@@ -422,28 +422,28 @@ namespace
                 : 100.0 * static_cast<double>(queueTotals.currentDepth) /
                     static_cast<double>(queueTotals.capacity);
             sample.latencySampleCount = latencyDeltaCount;
-            sample.latencyP50Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.latencyP50Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 latencyDeltaBuckets,
                 latencyDeltaCount,
                 50.0);
-            sample.latencyP95Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.latencyP95Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 latencyDeltaBuckets,
                 latencyDeltaCount,
                 95.0);
-            sample.latencyP99Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.latencyP99Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 latencyDeltaBuckets,
                 latencyDeltaCount,
                 99.0);
             sample.queueWaitSampleCount = queueWaitDeltaCount;
-            sample.queueWaitP50Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.queueWaitP50Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 queueWaitDeltaBuckets,
                 queueWaitDeltaCount,
                 50.0);
-            sample.queueWaitP95Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.queueWaitP95Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 queueWaitDeltaBuckets,
                 queueWaitDeltaCount,
                 95.0);
-            sample.queueWaitP99Ns = mdp::LatencyRecorder::percentileFromBuckets(
+            sample.queueWaitP99Ns = mdp::metrics::LatencyRecorder::percentileFromBuckets(
                 queueWaitDeltaBuckets,
                 queueWaitDeltaCount,
                 99.0);
@@ -474,8 +474,8 @@ namespace
 
         const auto& config = mdp::config::get();
         const std::string profile = configPath.stem().string();
-        mdp::WorkerPool workerPool(config.runtime().numWorkers);
-        mdp::Producer producer(workerPool);
+        mdp::pipeline::WorkerPool workerPool(config.runtime().numWorkers);
+        mdp::pipeline::Producer producer(workerPool);
 
         workerPool.start();
         producer.start();

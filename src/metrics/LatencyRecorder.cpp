@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace mdp
+namespace mdp::metrics
 {
     void LatencyRecorder::record(std::uint64_t latencyNs)
     {

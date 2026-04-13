@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace mdp
+namespace mdp::processing
 {
     std::vector<RuleAlert> RiskRuleEvaluator::evaluate(
         const MarketDataEvent& event,

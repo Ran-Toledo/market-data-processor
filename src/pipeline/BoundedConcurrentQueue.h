@@ -9,7 +9,7 @@
 #include <deque>
 #include <mutex>
 
-namespace mdp
+namespace mdp::pipeline
 {
     template <typename T>
     class BoundedConcurrentQueue

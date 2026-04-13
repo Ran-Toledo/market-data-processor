@@ -2,7 +2,7 @@
 
 #include "core/MarketDataEvent.h"
 
-namespace mdp::validation
+namespace mdp::processing::validation
 {
     enum class ValidationError
     {
