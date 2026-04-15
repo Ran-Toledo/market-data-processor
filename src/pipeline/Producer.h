@@ -10,10 +10,20 @@
 
 namespace mdp::pipeline
 {
+    struct ProducerOptions
+    {
+        std::size_t producerCount{ 1 };
+        std::size_t producerBurstSize{ 1 };
+        std::uint32_t producerSleepUs{ 1000 };
+        bool enableEventLogging{ false };
+        bool enableStatsLogging{ false };
+        std::size_t statsLogInterval{ 1000 };
+    };
+
     class Producer
     {
     public:
-        explicit Producer(IEventRouter& eventRouter);
+        explicit Producer(IEventRouter& eventRouter, ProducerOptions options = {});
         ~Producer();
 
         void start();
@@ -24,14 +34,17 @@ namespace mdp::pipeline
         std::size_t getProducedCount() const;
         std::size_t getRejectedCount() const;
         std::size_t getActiveProducerCount() const;
+        const ProducerOptions& getOptions() const { return m_options; }
 
     private:
         void produceLoop(std::size_t producerIndex);
-        static std::vector<std::unique_ptr<source::IMarketDataSource>> createSources();
+        static std::vector<std::unique_ptr<source::IMarketDataSource>> createSources(
+            std::size_t producerCount);
 
     private:
         std::vector<std::unique_ptr<source::IMarketDataSource>> m_sources;
         IEventRouter& m_eventRouter;
+        ProducerOptions m_options;
 
         std::vector<std::thread> m_workerThreads;
         std::atomic<bool> m_running{ false };

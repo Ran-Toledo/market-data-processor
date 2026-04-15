@@ -7,6 +7,7 @@ void runEventQueueTests();
 void runLatencyRecorderTests();
 void runMarketDataEventFrameTests();
 void runMetricsCollectorTests();
+void runPortProtocolTests();
 void runRiskRuleEvaluatorTests();
 void runSymbolStatsTests();
 void runSymbolStateStoreTests();
@@ -49,6 +50,12 @@ namespace
         if (suiteName == "unit.metrics_collector")
         {
             runMetricsCollectorTests();
+            return true;
+        }
+
+        if (suiteName == "unit.port_protocol")
+        {
+            runPortProtocolTests();
             return true;
         }
 
@@ -102,6 +109,7 @@ int main(int argc, char** argv)
         "unit.latency_recorder",
         "unit.market_data_event_frame",
         "unit.metrics_collector",
+        "unit.port_protocol",
         "unit.risk_rule_evaluator",
         "unit.symbol_stats",
         "unit.symbol_state_store",

@@ -1,5 +1,4 @@
 #include "pipeline/Producer.h"
-#include "config/AppConfig.h"
 #include "source/SyntheticMarketDataSource.h"
 
 #include <algorithm>
@@ -10,9 +9,10 @@
 
 namespace mdp::pipeline
 {
-    Producer::Producer(IEventRouter& eventRouter)
-        : m_sources(createSources())
+    Producer::Producer(IEventRouter& eventRouter, ProducerOptions options)
+        : m_sources(createSources(options.producerCount))
         , m_eventRouter(eventRouter)
+        , m_options(options)
     {
         if (m_sources.empty())
         {
@@ -86,7 +86,7 @@ namespace mdp::pipeline
         while (m_running.load())
         {
             for (std::size_t i = 0;
-                i < config::get().producer().producerBurstSize && m_running.load();
+                i < m_options.producerBurstSize && m_running.load();
                 ++i)
             {
                 MarketDataEvent event;
@@ -106,15 +106,14 @@ namespace mdp::pipeline
                     const std::size_t producedCount =
                         m_producedCount.fetch_add(1) + 1;
 
-                    if (config::get().logging().enableEventLogging)
+                    if (m_options.enableEventLogging)
                     {
                         std::cout << "Produced event | " << event << std::endl;
                     }
 
-                    if (config::get().logging().enableProcessingStatsLogging &&
-                        config::get().reporting().processingStatsLogInterval > 0 &&
-                        (producedCount %
-                            config::get().reporting().processingStatsLogInterval == 0))
+                    if (m_options.enableStatsLogging &&
+                        m_options.statsLogInterval > 0 &&
+                        (producedCount % m_options.statsLogInterval == 0))
                     {
                         std::cout << "Produced events: " << producedCount << std::endl;
                     }
@@ -124,25 +123,26 @@ namespace mdp::pipeline
                     const std::size_t rejectedCount =
                         m_rejectedCount.fetch_add(1) + 1;
 
-                    if (config::get().logging().enableEventLogging)
+                    if (m_options.enableEventLogging)
                     {
                         std::cout << "Rejected event | " << rejectedCount << std::endl;
                     }
                 }
             }
 
-            if (config::get().producer().producerSleepUs > 0 && m_running.load())
+            if (m_options.producerSleepUs > 0 && m_running.load())
             {
                 std::this_thread::sleep_for(
-                    std::chrono::microseconds(config::get().producer().producerSleepUs));
+                    std::chrono::microseconds(m_options.producerSleepUs));
             }
         }
     }
 
-    std::vector<std::unique_ptr<source::IMarketDataSource>> Producer::createSources()
+    std::vector<std::unique_ptr<source::IMarketDataSource>> Producer::createSources(
+        std::size_t producerCount)
     {
         const std::size_t configuredProducerCount =
-            std::max<std::size_t>(1, config::get().producer().producerCount);
+            std::max<std::size_t>(1, producerCount);
         const std::size_t activeProducerCount = std::min(
             configuredProducerCount,
             source::SyntheticMarketDataSource::getSymbolUniverseSize());

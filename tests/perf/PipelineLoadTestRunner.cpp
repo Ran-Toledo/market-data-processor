@@ -3,6 +3,7 @@
 #include "pipeline/WorkerPool.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -152,6 +153,102 @@ namespace
         }
 
         return static_cast<double>(count) / elapsedSeconds;
+    }
+
+    std::string trim(const std::string& value)
+    {
+        const auto begin = std::find_if_not(
+            value.begin(),
+            value.end(),
+            [](unsigned char c) { return std::isspace(c) != 0; });
+        const auto end = std::find_if_not(
+            value.rbegin(),
+            value.rend(),
+            [](unsigned char c) { return std::isspace(c) != 0; }).base();
+
+        if (begin >= end)
+        {
+            return {};
+        }
+
+        return std::string(begin, end);
+    }
+
+    std::string toLower(std::string value)
+    {
+        std::transform(
+            value.begin(),
+            value.end(),
+            value.begin(),
+            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return value;
+    }
+
+    mdp::pipeline::ProducerOptions loadProducerOptions(
+        const std::filesystem::path& configPath)
+    {
+        mdp::pipeline::ProducerOptions options;
+        options.producerCount = 1;
+        options.producerBurstSize = 1;
+        options.producerSleepUs = 0;
+
+        std::ifstream input(configPath);
+        if (!input.is_open())
+        {
+            throw std::runtime_error(
+                "Failed to open config file: " + configPath.string());
+        }
+
+        std::string currentSection;
+        std::string line;
+
+        while (std::getline(input, line))
+        {
+            const std::string trimmedLine = trim(line);
+            if (trimmedLine.empty() || trimmedLine[0] == '#' || trimmedLine[0] == ';')
+            {
+                continue;
+            }
+
+            if (trimmedLine.front() == '[' && trimmedLine.back() == ']')
+            {
+                currentSection = toLower(
+                    trim(trimmedLine.substr(1, trimmedLine.size() - 2)));
+                continue;
+            }
+
+            if (currentSection != "producer")
+            {
+                continue;
+            }
+
+            const std::size_t separator = trimmedLine.find('=');
+            if (separator == std::string::npos)
+            {
+                continue;
+            }
+
+            const std::string key = toLower(trim(trimmedLine.substr(0, separator)));
+            const std::string value = trim(trimmedLine.substr(separator + 1));
+
+            if (key == "producer_count")
+            {
+                options.producerCount =
+                    static_cast<std::size_t>(std::stoull(value));
+            }
+            else if (key == "producer_burst_size")
+            {
+                options.producerBurstSize =
+                    static_cast<std::size_t>(std::stoull(value));
+            }
+            else if (key == "producer_sleep_us")
+            {
+                options.producerSleepUs =
+                    static_cast<std::uint32_t>(std::stoul(value));
+            }
+        }
+
+        return options;
     }
 
     bool isNearCapacity(const mdp::pipeline::WorkerPool::PartitionMetrics& metrics)
@@ -473,9 +570,11 @@ namespace
         mdp::config::loadFromFile(configPath);
 
         const auto& config = mdp::config::get();
+        const mdp::pipeline::ProducerOptions producerOptions =
+            loadProducerOptions(configPath);
         const std::string profile = configPath.stem().string();
         mdp::pipeline::WorkerPool workerPool(config.runtime().numWorkers);
-        mdp::pipeline::Producer producer(workerPool);
+        mdp::pipeline::Producer producer(workerPool, producerOptions);
 
         workerPool.start();
         producer.start();
@@ -526,10 +625,10 @@ namespace
         result.runIndex = runIndex;
         result.durationSec = durationSec;
         result.workerCount = config.runtime().numWorkers;
-        result.producerCount = config.producer().producerCount;
+        result.producerCount = producerOptions.producerCount;
         result.activeProducerCount = producer.getActiveProducerCount();
-        result.producerBurstSize = config.producer().producerBurstSize;
-        result.producerSleepUs = config.producer().producerSleepUs;
+        result.producerBurstSize = producerOptions.producerBurstSize;
+        result.producerSleepUs = producerOptions.producerSleepUs;
         result.processingDelayUs = config.worker().processingDelayUs;
         result.busyWorkIterations = config.worker().optionalBusyWorkIterations;
         result.workerQueueCapacity = config.worker().workerQueueCapacity;

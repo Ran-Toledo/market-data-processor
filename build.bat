@@ -30,6 +30,7 @@ echo Debug executable: build\Debug\market_data_processor.exe
 echo Release executable: build\Release\market_data_processor.exe
 echo Test executable: build\Debug\market_data_processor_tests.exe
 echo Performance executable: build\Release\pipeline_load_experiments.exe
+echo Publisher executable: build\publisher\Release\market_data_publisher.exe
 exit /b 0
 
 :fail_configure

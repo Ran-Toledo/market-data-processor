@@ -193,24 +193,7 @@ namespace mdp::config
             }
             else if (currentSection == "producer")
             {
-                if (key == "producer_count")
-                {
-                    config.m_producer.producerCount = parseSize(value);
-                }
-                else if (key == "producer_burst_size")
-                {
-                    config.m_producer.producerBurstSize = parseSize(value);
-                }
-                else if (key == "producer_sleep_us")
-                {
-                    config.m_producer.producerSleepUs = parseUint32(value);
-                }
-                else
-                {
-                    throw std::runtime_error(
-                        "Unknown producer key on line " + std::to_string(lineNumber) +
-                        ": " + key);
-                }
+                continue;
             }
             else if (currentSection == "worker")
             {
@@ -268,15 +251,7 @@ namespace mdp::config
             }
             else if (currentSection == "load_test")
             {
-                if (key == "producer_burst_size")
-                {
-                    config.m_loadTest.producerBurstSize = parseSize(value);
-                }
-                else if (key == "producer_sleep_us")
-                {
-                    config.m_loadTest.producerSleepUs = parseUint32(value);
-                }
-                else if (key == "processing_delay_us")
+                if (key == "processing_delay_us")
                 {
                     config.m_loadTest.processingDelayUs = parseUint32(value);
                 }
@@ -317,8 +292,6 @@ namespace mdp::config
             return;
         }
 
-        m_producer.producerBurstSize = m_loadTest.producerBurstSize;
-        m_producer.producerSleepUs = m_loadTest.producerSleepUs;
         m_worker.processingDelayUs = m_loadTest.processingDelayUs;
         m_worker.optionalBusyWorkIterations = m_loadTest.optionalBusyWorkIterations;
         m_worker.workerQueueCapacity = m_loadTest.workerQueueCapacity;

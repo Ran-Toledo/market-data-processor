@@ -47,12 +47,14 @@ namespace
             (metrics.maxDepth * 10 >= metrics.capacity * 9);
     }
 
-    void printProducerMode(const mdp::pipeline::Producer& producer)
+    void printProducerMode(
+        const mdp::pipeline::Producer& producer,
+        const mdp::pipeline::ProducerOptions& producerOptions)
     {
-        if (mdp::config::get().producer().producerCount != producer.getActiveProducerCount())
+        if (producerOptions.producerCount != producer.getActiveProducerCount())
         {
             std::cout << "Configured producerCount="
-                << mdp::config::get().producer().producerCount
+                << producerOptions.producerCount
                 << ", using " << producer.getActiveProducerCount()
                 << " producer thread with burst generation." << std::endl;
         }
@@ -265,9 +267,15 @@ int main()
     mdp::config::loadFromFile(getConfigPath());
 
     mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
-    mdp::pipeline::Producer producer(workerPool);
+    mdp::pipeline::ProducerOptions producerOptions;
+    producerOptions.enableEventLogging = mdp::config::get().logging().enableEventLogging;
+    producerOptions.enableStatsLogging =
+        mdp::config::get().logging().enableProcessingStatsLogging;
+    producerOptions.statsLogInterval =
+        mdp::config::get().reporting().processingStatsLogInterval;
+    mdp::pipeline::Producer producer(workerPool, producerOptions);
 
-    printProducerMode(producer);
+    printProducerMode(producer, producerOptions);
     std::cout << "Starting pipeline..." << std::endl;
 
     workerPool.start();

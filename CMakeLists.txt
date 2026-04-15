@@ -32,6 +32,8 @@ file(GLOB_RECURSE MDP_INCLUDE_HEADER_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
 )
 
+add_subdirectory(lib/protocol)
+
 set(MDP_LIBRARY_SOURCE_FILES ${MDP_SOURCE_FILES})
 list(FILTER MDP_LIBRARY_SOURCE_FILES EXCLUDE REGEX ".*/main\\.cpp$")
 
@@ -49,6 +51,8 @@ target_include_directories(market_data_processor
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+target_link_libraries(market_data_processor PRIVATE mdp_protocol)
+
 enable_testing()
 
 add_executable(market_data_processor_tests
@@ -58,6 +62,7 @@ add_executable(market_data_processor_tests
     tests/unit/LatencyRecorderTests.cpp
     tests/unit/MarketDataEventFrameTests.cpp
     tests/unit/MetricsCollectorTests.cpp
+    tests/unit/PortProtocolTests.cpp
     tests/unit/RiskRuleEvaluatorTests.cpp
     tests/unit/SequenceTrackerTests.cpp
     tests/unit/SymbolStateStoreTests.cpp
@@ -81,11 +86,15 @@ target_include_directories(market_data_processor_tests
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+target_link_libraries(market_data_processor_tests PRIVATE mdp_protocol)
+
 target_include_directories(pipeline_load_experiments
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
+
+target_link_libraries(pipeline_load_experiments PRIVATE mdp_protocol)
 
 add_test(NAME unit.sequence_tracker COMMAND market_data_processor_tests unit.sequence_tracker)
 add_test(NAME unit.event_processor COMMAND market_data_processor_tests unit.event_processor)
@@ -93,6 +102,7 @@ add_test(NAME unit.event_queue COMMAND market_data_processor_tests unit.event_qu
 add_test(NAME unit.latency_recorder COMMAND market_data_processor_tests unit.latency_recorder)
 add_test(NAME unit.market_data_event_frame COMMAND market_data_processor_tests unit.market_data_event_frame)
 add_test(NAME unit.metrics_collector COMMAND market_data_processor_tests unit.metrics_collector)
+add_test(NAME unit.port_protocol COMMAND market_data_processor_tests unit.port_protocol)
 add_test(NAME unit.risk_rule_evaluator COMMAND market_data_processor_tests unit.risk_rule_evaluator)
 add_test(NAME unit.symbol_stats COMMAND market_data_processor_tests unit.symbol_stats)
 add_test(NAME unit.symbol_state_store COMMAND market_data_processor_tests unit.symbol_state_store)
@@ -125,3 +135,5 @@ source_group(
     PREFIX "Source Files"
     FILES ${MDP_SOURCE_FILES}
 )
+
+add_subdirectory(publisher)

@@ -35,13 +35,6 @@ namespace mdp::config
         std::size_t periodicSummaryIntervalMs{ 1000 };
     };
 
-    struct ProducerConfig
-    {
-        std::size_t producerCount{ 1 };
-        std::size_t producerBurstSize{ 1 };
-        std::uint32_t producerSleepUs{ 1000 };
-    };
-
     struct WorkerConfig
     {
         std::uint32_t processingDelayUs{ 0 };
@@ -61,8 +54,6 @@ namespace mdp::config
 
     struct LoadTestConfig
     {
-        std::size_t producerBurstSize{ 1 };
-        std::uint32_t producerSleepUs{ 0 };
         std::uint32_t processingDelayUs{ 0 };
         std::size_t optionalBusyWorkIterations{ 0 };
         std::size_t workerQueueCapacity{ 1024 };
@@ -76,7 +67,6 @@ namespace mdp::config
 
         const LoggingConfig& logging() const { return m_logging; }
         const RuntimeConfig& runtime() const { return m_runtime; }
-        const ProducerConfig& producer() const { return m_producer; }
         const WorkerConfig& worker() const { return m_worker; }
         const ReportingConfig& reporting() const { return m_reporting; }
         const LoadTestConfig& loadTest() const { return m_loadTest; }
@@ -87,7 +77,6 @@ namespace mdp::config
     private:
         LoggingConfig m_logging;
         RuntimeConfig m_runtime;
-        ProducerConfig m_producer;
         WorkerConfig m_worker;
         ReportingConfig m_reporting;
         LoadTestConfig m_loadTest;
