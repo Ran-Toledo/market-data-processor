@@ -1,14 +1,14 @@
 #include "processing/EventProcessor.h"
 
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 #include "processing/EventValidator.h"
 #include "util/Clock.h"
 
 #include <chrono>
 #include <thread>
-using namespace mdp::validation;
+using namespace mdp::processing::validation;
 
-namespace mdp
+namespace mdp::processing
 {
     namespace
     {
@@ -24,13 +24,19 @@ namespace mdp
         }
     }
 
-    EventProcessor::EventProcessor(IEventSink* eventSink)
+    EventProcessor::EventProcessor(output::IEventSink* eventSink)
         : m_eventSink(eventSink)
     {
     }
 
     EventProcessingResult EventProcessor::process(const MarketDataEvent& event)
     {
+        const auto processingStartNs = clock::nowNs();
+        if (event.enqueueTimestampNs > 0 && processingStartNs >= event.enqueueTimestampNs)
+        {
+            m_queueWaitLatency.record(processingStartNs - event.enqueueTimestampNs);
+        }
+
         simulateProcessingLoad();
 
         EventProcessingResult result;

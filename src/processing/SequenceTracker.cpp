@@ -1,6 +1,6 @@
 #include "processing/SequenceTracker.h"
 
-namespace mdp
+namespace mdp::processing
 {
     SequenceResult SequenceTracker::evaluate(const Symbol& symbol, SequenceNumber sequenceNumber)
     {

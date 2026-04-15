@@ -1,6 +1,6 @@
 #include "processing/EventValidator.h"
 
-namespace mdp::validation
+namespace mdp::processing::validation
 {
     ValidationResult validate(const MarketDataEvent& event)
     {

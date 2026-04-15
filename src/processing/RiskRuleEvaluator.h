@@ -1,13 +1,13 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 #include "processing/RuleAlert.h"
 #include "processing/SymbolStateStore.h"
 
 #include <optional>
 #include <vector>
 
-namespace mdp
+namespace mdp::processing
 {
     class RiskRuleEvaluator
     {

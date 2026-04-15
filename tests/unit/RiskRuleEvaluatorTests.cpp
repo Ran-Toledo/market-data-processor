@@ -19,12 +19,12 @@ namespace
 
 void runRiskRuleEvaluatorTests()
 {
-    mdp::RiskRuleEvaluator evaluator;
+    mdp::processing::RiskRuleEvaluator evaluator;
 
     const auto noPreviousStateAlerts = evaluator.evaluate(makeEvent(100.0, 100), std::nullopt);
     assert(noPreviousStateAlerts.empty());
 
-    mdp::SymbolState previousState;
+    mdp::processing::SymbolState previousState;
     previousState.lastPrice = 100.0;
 
     const auto normalAlerts = evaluator.evaluate(makeEvent(102.0, 100), previousState);
@@ -32,11 +32,11 @@ void runRiskRuleEvaluatorTests()
 
     const auto priceJumpAlerts = evaluator.evaluate(makeEvent(106.0, 100), previousState);
     assert(priceJumpAlerts.size() == 1);
-    assert(priceJumpAlerts[0].type == mdp::RuleType::PriceJump);
+    assert(priceJumpAlerts[0].type == mdp::processing::RuleType::PriceJump);
 
     const auto largeVolumeAlerts = evaluator.evaluate(makeEvent(102.0, 10000), previousState);
     assert(largeVolumeAlerts.size() == 1);
-    assert(largeVolumeAlerts[0].type == mdp::RuleType::LargeVolume);
+    assert(largeVolumeAlerts[0].type == mdp::processing::RuleType::LargeVolume);
 
     const auto combinedAlerts = evaluator.evaluate(makeEvent(106.0, 10000), previousState);
     assert(combinedAlerts.size() == 2);

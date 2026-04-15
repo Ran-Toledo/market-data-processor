@@ -1,6 +1,6 @@
 #include "processing/SymbolStateStore.h"
 
-namespace mdp
+namespace mdp::processing
 {
     void SymbolStateStore::update(const MarketDataEvent& event)
     {

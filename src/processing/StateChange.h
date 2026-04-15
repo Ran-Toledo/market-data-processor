@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace mdp
+namespace mdp::processing
 {
     struct StateChange
     {

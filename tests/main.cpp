@@ -3,8 +3,11 @@
 
 void runSequenceTrackerTests();
 void runEventProcessorTests();
+void runEventQueueTests();
 void runLatencyRecorderTests();
+void runMarketDataEventFrameTests();
 void runMetricsCollectorTests();
+void runPortProtocolTests();
 void runRiskRuleEvaluatorTests();
 void runSymbolStatsTests();
 void runSymbolStateStoreTests();
@@ -26,15 +29,33 @@ namespace
             return true;
         }
 
+        if (suiteName == "unit.event_queue")
+        {
+            runEventQueueTests();
+            return true;
+        }
+
         if (suiteName == "unit.latency_recorder")
         {
             runLatencyRecorderTests();
             return true;
         }
 
+        if (suiteName == "unit.market_data_event_frame")
+        {
+            runMarketDataEventFrameTests();
+            return true;
+        }
+
         if (suiteName == "unit.metrics_collector")
         {
             runMetricsCollectorTests();
+            return true;
+        }
+
+        if (suiteName == "unit.port_protocol")
+        {
+            runPortProtocolTests();
             return true;
         }
 
@@ -84,8 +105,11 @@ int main(int argc, char** argv)
     {
         "unit.sequence_tracker",
         "unit.event_processor",
+        "unit.event_queue",
         "unit.latency_recorder",
+        "unit.market_data_event_frame",
         "unit.metrics_collector",
+        "unit.port_protocol",
         "unit.risk_rule_evaluator",
         "unit.symbol_stats",
         "unit.symbol_state_store",

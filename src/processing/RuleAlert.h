@@ -1,10 +1,10 @@
 #pragma once
 
-#include "core/Types.h"
+#include "api/domain/Types.h"
 
 #include <string>
 
-namespace mdp
+namespace mdp::processing
 {
     enum class RuleType
     {

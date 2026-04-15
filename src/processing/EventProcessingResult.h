@@ -9,7 +9,7 @@
 #include <optional>
 #include <vector>
 
-namespace mdp
+namespace mdp::processing
 {
     struct EventProcessingResult
     {

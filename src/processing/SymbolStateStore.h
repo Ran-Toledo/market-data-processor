@@ -1,11 +1,11 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 
 #include <optional>
 #include <unordered_map>
 
-namespace mdp
+namespace mdp::processing
 {
     struct SymbolState
     {

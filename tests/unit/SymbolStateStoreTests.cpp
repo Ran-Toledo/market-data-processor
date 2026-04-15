@@ -22,7 +22,7 @@ namespace
 
 void runSymbolStateStoreTests()
 {
-    mdp::SymbolStateStore store;
+    mdp::processing::SymbolStateStore store;
 
     assert(!store.tryGet("AAPL").has_value());
     assert(store.getTrackedSymbolCount() == 0);

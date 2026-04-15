@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 
-namespace mdp
+namespace mdp::pipeline
 {
     class IEventRouter
     {

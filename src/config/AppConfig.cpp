@@ -1,4 +1,4 @@
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 
 #include <algorithm>
 #include <cctype>
@@ -84,6 +84,23 @@ namespace mdp::config
             }
 
             throw std::runtime_error("Invalid queue full policy: " + value);
+        }
+
+        QueueType parseQueueType(const std::string& value)
+        {
+            const std::string normalized = toLower(trim(value));
+
+            if (normalized == "blockingbounded" || normalized == "blocking_bounded")
+            {
+                return QueueType::BlockingBounded;
+            }
+
+            if (normalized == "lockfreering" || normalized == "lock_free_ring")
+            {
+                return QueueType::LockFreeRing;
+            }
+
+            throw std::runtime_error("Invalid queue type: " + value);
         }
     }
 
@@ -176,24 +193,7 @@ namespace mdp::config
             }
             else if (currentSection == "producer")
             {
-                if (key == "producer_count")
-                {
-                    config.m_producer.producerCount = parseSize(value);
-                }
-                else if (key == "producer_burst_size")
-                {
-                    config.m_producer.producerBurstSize = parseSize(value);
-                }
-                else if (key == "producer_sleep_us")
-                {
-                    config.m_producer.producerSleepUs = parseUint32(value);
-                }
-                else
-                {
-                    throw std::runtime_error(
-                        "Unknown producer key on line " + std::to_string(lineNumber) +
-                        ": " + key);
-                }
+                continue;
             }
             else if (currentSection == "worker")
             {
@@ -212,6 +212,10 @@ namespace mdp::config
                 else if (key == "queue_full_policy")
                 {
                     config.m_worker.workerQueueFullStrategy = parseQueueFullPolicy(value);
+                }
+                else if (key == "queue_type")
+                {
+                    config.m_worker.workerQueueType = parseQueueType(value);
                 }
                 else
                 {
@@ -247,15 +251,7 @@ namespace mdp::config
             }
             else if (currentSection == "load_test")
             {
-                if (key == "producer_burst_size")
-                {
-                    config.m_loadTest.producerBurstSize = parseSize(value);
-                }
-                else if (key == "producer_sleep_us")
-                {
-                    config.m_loadTest.producerSleepUs = parseUint32(value);
-                }
-                else if (key == "processing_delay_us")
+                if (key == "processing_delay_us")
                 {
                     config.m_loadTest.processingDelayUs = parseUint32(value);
                 }
@@ -266,6 +262,10 @@ namespace mdp::config
                 else if (key == "queue_capacity")
                 {
                     config.m_loadTest.workerQueueCapacity = parseSize(value);
+                }
+                else if (key == "queue_type")
+                {
+                    config.m_loadTest.workerQueueType = parseQueueType(value);
                 }
                 else
                 {
@@ -292,11 +292,10 @@ namespace mdp::config
             return;
         }
 
-        m_producer.producerBurstSize = m_loadTest.producerBurstSize;
-        m_producer.producerSleepUs = m_loadTest.producerSleepUs;
         m_worker.processingDelayUs = m_loadTest.processingDelayUs;
         m_worker.optionalBusyWorkIterations = m_loadTest.optionalBusyWorkIterations;
         m_worker.workerQueueCapacity = m_loadTest.workerQueueCapacity;
+        m_worker.workerQueueType = m_loadTest.workerQueueType;
     }
 
     const AppConfig& get()

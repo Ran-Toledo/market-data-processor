@@ -1,23 +1,16 @@
 #pragma once
 
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
+#include "pipeline/QueueMetricsSnapshot.h"
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
 #include <mutex>
-#include <atomic>
 
-namespace mdp
+namespace mdp::pipeline
 {
-    struct QueueMetricsSnapshot
-    {
-        std::size_t currentDepth{ 0 };
-        std::size_t maxDepth{ 0 };
-        std::uint64_t droppedCount{ 0 };
-        std::uint64_t failedEnqueueCount{ 0 };
-    };
-
     template <typename T>
     class BoundedConcurrentQueue
     {
@@ -31,6 +24,7 @@ namespace mdp
         bool pop(T& item);
 
         void close();
+        void closeAndDiscard();
         bool isClosed() const;
 
         std::size_t size() const;
@@ -59,4 +53,4 @@ namespace mdp
     };
 }
 
-#include "containers/queue/BoundedConcurrentQueue.hpp"
+#include "pipeline/BoundedConcurrentQueue.hpp"

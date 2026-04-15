@@ -4,7 +4,7 @@
 
 void runMetricsCollectorTests()
 {
-    mdp::MetricsCollector metrics;
+    mdp::metrics::MetricsCollector metrics;
 
     assert(metrics.getProcessed() == 0);
     assert(metrics.getValid() == 0);

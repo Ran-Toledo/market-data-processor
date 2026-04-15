@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace mdp
+namespace mdp::output
 {
     void ConsoleEventSink::publishProcessedEvent(const MarketDataEvent& event)
     {
@@ -10,14 +10,14 @@ namespace mdp
         std::cout << "[PROCESSED] " << event << '\n';
     }
 
-    void ConsoleEventSink::publishAlert(const RuleAlert& alert)
+    void ConsoleEventSink::publishAlert(const processing::RuleAlert& alert)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         std::cout << "[ALERT] Symbol=" << alert.symbol
             << " Message=" << alert.message << '\n';
     }
 
-    void ConsoleEventSink::publishStateChange(const StateChange& stateChange)
+    void ConsoleEventSink::publishStateChange(const processing::StateChange& stateChange)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         std::cout << "[STATE] Symbol=" << stateChange.symbol

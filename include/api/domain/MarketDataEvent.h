@@ -1,7 +1,6 @@
-// MarketDataEvent.h
 #pragma once
 
-#include "core/Types.h"
+#include "api/domain/Types.h"
 
 #include <ostream>
 
@@ -14,6 +13,7 @@ namespace mdp
         std::uint32_t volume;
         TimestampNs exchangeTimestampNs;
         TimestampNs ingestTimestampNs;
+        TimestampNs enqueueTimestampNs{ 0 };
         SequenceNumber sequenceNumber;
     };
 
@@ -24,6 +24,7 @@ namespace mdp
             << ", Volume: " << event.volume
             << ", ExchangeTsNs: " << event.exchangeTimestampNs
             << ", IngestTsNs: " << event.ingestTimestampNs
+            << ", EnqueueTsNs: " << event.enqueueTimestampNs
             << ", SeqNum: " << event.sequenceNumber;
 
         return os;

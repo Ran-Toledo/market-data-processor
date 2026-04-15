@@ -1,11 +1,169 @@
 #include "pipeline/WorkerPool.h"
 
+#include "pipeline/BlockingBoundedEventQueue.h"
+#include "pipeline/LockFreeRingEventQueue.h"
+#include "util/Clock.h"
+
 #include <functional>
 #include <limits>
 #include <stdexcept>
 
-namespace mdp
+namespace mdp::pipeline
 {
+    using metrics::LatencyRecorder;
+    using processing::EventProcessor;
+    using processing::SymbolState;
+    using processing::SymbolStatistics;
+    using processing::SymbolStats;
+
+    namespace
+    {
+        std::unique_ptr<IEventQueue> createEventQueue()
+        {
+            const auto& workerConfig = config::get().worker();
+
+            switch (workerConfig.workerQueueType)
+            {
+            case config::QueueType::BlockingBounded:
+                return std::make_unique<BlockingBoundedEventQueue>(
+                    workerConfig.workerQueueCapacity,
+                    workerConfig.workerQueueFullStrategy);
+
+            case config::QueueType::LockFreeRing:
+                return std::make_unique<LockFreeRingEventQueue>(
+                    workerConfig.workerQueueCapacity,
+                    workerConfig.workerQueueFullStrategy);
+            }
+
+            throw std::runtime_error("Unsupported worker queue type");
+        }
+
+        std::uint64_t getAverageLatencyAcross(
+            const std::vector<std::unique_ptr<WorkerPool::PartitionContext>>& partitions,
+            const LatencyRecorder& (EventProcessor::* getRecorder)() const)
+        {
+            std::uint64_t totalWeightedLatency = 0;
+            std::uint64_t totalCount = 0;
+
+            for (const auto& partition : partitions)
+            {
+                const LatencyRecorder& latency = (partition->processor.*getRecorder)();
+                const std::uint64_t count = latency.getCount();
+
+                if (count == 0)
+                {
+                    continue;
+                }
+
+                totalWeightedLatency += latency.getAverageLatencyNs() * count;
+                totalCount += count;
+            }
+
+            if (totalCount == 0)
+            {
+                return 0;
+            }
+
+            return totalWeightedLatency / totalCount;
+        }
+
+        std::uint64_t getMinLatencyAcross(
+            const std::vector<std::unique_ptr<WorkerPool::PartitionContext>>& partitions,
+            const LatencyRecorder& (EventProcessor::* getRecorder)() const)
+        {
+            std::uint64_t globalMin = std::numeric_limits<std::uint64_t>::max();
+            bool foundActivePartition = false;
+
+            for (const auto& partition : partitions)
+            {
+                const LatencyRecorder& latency = (partition->processor.*getRecorder)();
+
+                if (latency.getCount() == 0)
+                {
+                    continue;
+                }
+
+                const std::uint64_t partitionMin = latency.getMinLatencyNs();
+                if (partitionMin < globalMin)
+                {
+                    globalMin = partitionMin;
+                }
+
+                foundActivePartition = true;
+            }
+
+            return foundActivePartition ? globalMin : 0;
+        }
+
+        std::uint64_t getMaxLatencyAcross(
+            const std::vector<std::unique_ptr<WorkerPool::PartitionContext>>& partitions,
+            const LatencyRecorder& (EventProcessor::* getRecorder)() const)
+        {
+            std::uint64_t globalMax = 0;
+            bool foundActivePartition = false;
+
+            for (const auto& partition : partitions)
+            {
+                const LatencyRecorder& latency = (partition->processor.*getRecorder)();
+
+                if (latency.getCount() == 0)
+                {
+                    continue;
+                }
+
+                const std::uint64_t partitionMax = latency.getMaxLatencyNs();
+                if (partitionMax > globalMax)
+                {
+                    globalMax = partitionMax;
+                }
+
+                foundActivePartition = true;
+            }
+
+            return foundActivePartition ? globalMax : 0;
+        }
+
+        LatencyRecorder::BucketSnapshot getLatencyBucketsAcross(
+            const std::vector<std::unique_ptr<WorkerPool::PartitionContext>>& partitions,
+            const LatencyRecorder& (EventProcessor::* getRecorder)() const)
+        {
+            LatencyRecorder::BucketSnapshot mergedBuckets{};
+
+            for (const auto& partition : partitions)
+            {
+                const LatencyRecorder& latency = (partition->processor.*getRecorder)();
+                const auto partitionBuckets = latency.getBucketSnapshot();
+
+                for (std::size_t i = 0; i < mergedBuckets.size(); ++i)
+                {
+                    mergedBuckets[i] += partitionBuckets[i];
+                }
+            }
+
+            return mergedBuckets;
+        }
+
+        std::uint64_t getLatencyCountAcross(
+            const std::vector<std::unique_ptr<WorkerPool::PartitionContext>>& partitions,
+            const LatencyRecorder& (EventProcessor::* getRecorder)() const)
+        {
+            std::uint64_t totalCount = 0;
+
+            for (const auto& partition : partitions)
+            {
+                const LatencyRecorder& latency = (partition->processor.*getRecorder)();
+                totalCount += latency.getCount();
+            }
+
+            return totalCount;
+        }
+    }
+
+    WorkerPool::PartitionContext::PartitionContext()
+        : queue(createEventQueue())
+    {
+    }
+
     WorkerPool::WorkerPool(std::size_t workerCount)
     {
         if (workerCount == 0)
@@ -42,7 +200,7 @@ namespace mdp
         }
     }
 
-    void WorkerPool::stop()
+    void WorkerPool::stop(bool drainQueuedEvents)
     {
         if (!m_running.exchange(false))
         {
@@ -51,7 +209,14 @@ namespace mdp
 
         for (auto& partition : m_partitions)
         {
-            partition->queue.close();
+            if (drainQueuedEvents)
+            {
+                partition->queue->close();
+            }
+            else
+            {
+                partition->queue->closeAndDiscard();
+            }
         }
     }
 
@@ -60,7 +225,10 @@ namespace mdp
         const std::size_t index = getPartitionIndex(event.symbol);
         auto& partition = *m_partitions[index];
 
-        const bool pushed = partition.queue.push(event);
+        MarketDataEvent queuedEvent = event;
+        queuedEvent.enqueueTimestampNs = clock::nowNs();
+
+        const bool pushed = partition.queue->push(queuedEvent);
         if (pushed)
         {
             partition.acceptedCount.fetch_add(1);
@@ -88,7 +256,7 @@ namespace mdp
 
         MarketDataEvent event;
 
-        while (partition.queue.pop(event))
+        while (partition.queue->pop(event))
         {
             partition.processor.process(event);
         }
@@ -136,7 +304,7 @@ namespace mdp
         for (std::size_t i = 0; i < m_partitions.size(); ++i)
         {
             const auto& partition = *m_partitions[i];
-            const QueueMetricsSnapshot queueMetrics = partition.queue.getMetricsSnapshot();
+            const QueueMetricsSnapshot queueMetrics = partition.queue->getMetricsSnapshot();
 
             PartitionMetrics snapshot;
             snapshot.partitionIndex = i;
@@ -146,7 +314,7 @@ namespace mdp
             snapshot.failedEnqueueCount = queueMetrics.failedEnqueueCount;
             snapshot.acceptedCount = partition.acceptedCount.load();
             snapshot.processedCount = partition.processor.getMetrics().getProcessed();
-            snapshot.capacity = partition.queue.capacity();
+            snapshot.capacity = partition.queue->capacity();
 
             metrics.push_back(snapshot);
         }
@@ -295,6 +463,74 @@ namespace mdp
         }
 
         return globalMax;
+    }
+
+    std::uint64_t WorkerPool::getPercentileLatencyNs(double percentile) const
+    {
+        const LatencyRecorder::BucketSnapshot mergedBuckets = getLatencyBucketSnapshot();
+        std::uint64_t totalCount = 0;
+
+        for (const auto& partition : m_partitions)
+        {
+            const LatencyRecorder& latency = partition->processor.getLatency();
+            totalCount += latency.getCount();
+        }
+
+        return LatencyRecorder::percentileFromBuckets(
+            mergedBuckets,
+            totalCount,
+            percentile);
+    }
+
+    LatencyRecorder::BucketSnapshot WorkerPool::getLatencyBucketSnapshot() const
+    {
+        LatencyRecorder::BucketSnapshot mergedBuckets{};
+
+        for (const auto& partition : m_partitions)
+        {
+            const LatencyRecorder& latency = partition->processor.getLatency();
+            const auto partitionBuckets = latency.getBucketSnapshot();
+
+            for (std::size_t i = 0; i < mergedBuckets.size(); ++i)
+            {
+                mergedBuckets[i] += partitionBuckets[i];
+            }
+        }
+
+        return mergedBuckets;
+    }
+
+    std::uint64_t WorkerPool::getAverageQueueWaitLatencyNs() const
+    {
+        return getAverageLatencyAcross(m_partitions, &EventProcessor::getQueueWaitLatency);
+    }
+
+    std::uint64_t WorkerPool::getMinQueueWaitLatencyNs() const
+    {
+        return getMinLatencyAcross(m_partitions, &EventProcessor::getQueueWaitLatency);
+    }
+
+    std::uint64_t WorkerPool::getMaxQueueWaitLatencyNs() const
+    {
+        return getMaxLatencyAcross(m_partitions, &EventProcessor::getQueueWaitLatency);
+    }
+
+    std::uint64_t WorkerPool::getPercentileQueueWaitLatencyNs(double percentile) const
+    {
+        const LatencyRecorder::BucketSnapshot mergedBuckets =
+            getQueueWaitLatencyBucketSnapshot();
+        const std::uint64_t totalCount =
+            getLatencyCountAcross(m_partitions, &EventProcessor::getQueueWaitLatency);
+
+        return LatencyRecorder::percentileFromBuckets(
+            mergedBuckets,
+            totalCount,
+            percentile);
+    }
+
+    LatencyRecorder::BucketSnapshot WorkerPool::getQueueWaitLatencyBucketSnapshot() const
+    {
+        return getLatencyBucketsAcross(m_partitions, &EventProcessor::getQueueWaitLatency);
     }
 
     std::uint64_t WorkerPool::getValidCount() const

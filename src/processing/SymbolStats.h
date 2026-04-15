@@ -1,14 +1,14 @@
 // SymbolStats.h
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
 
-namespace mdp
+namespace mdp::processing
 {
     struct SymbolStatistics
     {

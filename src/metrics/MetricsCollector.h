@@ -3,7 +3,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace mdp
+namespace mdp::metrics
 {
     class MetricsCollector
     {
