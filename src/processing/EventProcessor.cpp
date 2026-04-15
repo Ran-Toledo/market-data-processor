@@ -1,6 +1,6 @@
 #include "processing/EventProcessor.h"
 
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 #include "processing/EventValidator.h"
 #include "util/Clock.h"
 

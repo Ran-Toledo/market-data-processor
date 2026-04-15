@@ -56,6 +56,7 @@ add_executable(market_data_processor_tests
     tests/unit/EventProcessorTests.cpp
     tests/unit/EventQueueTests.cpp
     tests/unit/LatencyRecorderTests.cpp
+    tests/unit/MarketDataEventFrameTests.cpp
     tests/unit/MetricsCollectorTests.cpp
     tests/unit/RiskRuleEvaluatorTests.cpp
     tests/unit/SequenceTrackerTests.cpp
@@ -90,6 +91,7 @@ add_test(NAME unit.sequence_tracker COMMAND market_data_processor_tests unit.seq
 add_test(NAME unit.event_processor COMMAND market_data_processor_tests unit.event_processor)
 add_test(NAME unit.event_queue COMMAND market_data_processor_tests unit.event_queue)
 add_test(NAME unit.latency_recorder COMMAND market_data_processor_tests unit.latency_recorder)
+add_test(NAME unit.market_data_event_frame COMMAND market_data_processor_tests unit.market_data_event_frame)
 add_test(NAME unit.metrics_collector COMMAND market_data_processor_tests unit.metrics_collector)
 add_test(NAME unit.risk_rule_evaluator COMMAND market_data_processor_tests unit.risk_rule_evaluator)
 add_test(NAME unit.symbol_stats COMMAND market_data_processor_tests unit.symbol_stats)

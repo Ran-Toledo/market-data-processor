@@ -1,4 +1,3 @@
-// Types.h
 #pragma once
 
 #include <cstdint>

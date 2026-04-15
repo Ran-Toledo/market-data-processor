@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 #include "pipeline/QueueMetricsSnapshot.h"
 
 #include <cstddef>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 #include "pipeline/IEventQueue.h"
 
 #include <atomic>

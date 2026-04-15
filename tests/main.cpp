@@ -5,6 +5,7 @@ void runSequenceTrackerTests();
 void runEventProcessorTests();
 void runEventQueueTests();
 void runLatencyRecorderTests();
+void runMarketDataEventFrameTests();
 void runMetricsCollectorTests();
 void runRiskRuleEvaluatorTests();
 void runSymbolStatsTests();
@@ -36,6 +37,12 @@ namespace
         if (suiteName == "unit.latency_recorder")
         {
             runLatencyRecorderTests();
+            return true;
+        }
+
+        if (suiteName == "unit.market_data_event_frame")
+        {
+            runMarketDataEventFrameTests();
             return true;
         }
 
@@ -93,6 +100,7 @@ int main(int argc, char** argv)
         "unit.event_processor",
         "unit.event_queue",
         "unit.latency_recorder",
+        "unit.market_data_event_frame",
         "unit.metrics_collector",
         "unit.risk_rule_evaluator",
         "unit.symbol_stats",

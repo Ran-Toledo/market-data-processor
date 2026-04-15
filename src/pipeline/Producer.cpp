@@ -1,5 +1,5 @@
 #include "pipeline/Producer.h"
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 #include "source/SyntheticMarketDataSource.h"
 
 #include <algorithm>

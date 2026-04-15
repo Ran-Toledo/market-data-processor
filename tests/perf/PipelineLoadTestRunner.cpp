@@ -1,4 +1,4 @@
-#include "core/AppConfig.h"
+#include "config/AppConfig.h"
 #include "pipeline/Producer.h"
 #include "pipeline/WorkerPool.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/MarketDataEvent.h"
+#include "api/domain/MarketDataEvent.h"
 #include "processing/RuleAlert.h"
 #include "processing/SymbolStateStore.h"
 
