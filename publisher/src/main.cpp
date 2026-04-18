@@ -1,5 +1,6 @@
 #include "SyntheticPublisherSource.h"
 #include "PublisherConfig.h"
+#include "TcpPublisherClient.h"
 
 #include "api/protocol/MarketDataEventFrame.h"
 
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace
 {
@@ -67,19 +69,39 @@ int main(int argc, char** argv)
     }
 
     mdp::publisher::SyntheticPublisherSource source;
+    mdp::publisher::TcpPublisherClientOptions clientOptions;
+    clientOptions.processorHost = config.network().processorHost;
+    clientOptions.processorPort = config.network().processorPort;
+    clientOptions.connectRetryMs = config.network().connectRetryMs;
+    clientOptions.maxBatchSize = static_cast<std::uint32_t>(config.runtime().burstSize);
+    mdp::publisher::TcpPublisherClient client(clientOptions);
+    client.connect();
 
+    const std::size_t maxBatchSize = static_cast<std::size_t>(client.maxBatchSize());
     std::size_t generatedCount = 0;
     std::size_t encodedCount = 0;
     std::size_t encodeFailureCount = 0;
+    std::uint64_t acceptedCount = 0;
 
     const auto start = std::chrono::steady_clock::now();
+    const auto stopAt = config.runtime().runtimeSeconds > 0
+        ? start + std::chrono::seconds(config.runtime().runtimeSeconds)
+        : std::chrono::steady_clock::time_point::max();
+    std::vector<mdp::protocol::MarketDataEventFrame> batch;
+    batch.reserve(maxBatchSize);
 
-    for (std::size_t i = 0; i < config.runtime().eventCount;)
+    while (std::chrono::steady_clock::now() < stopAt &&
+        (config.runtime().eventCount == 0 ||
+            generatedCount < config.runtime().eventCount))
     {
+        batch.clear();
+
         for (std::size_t burstIndex = 0;
-            burstIndex < config.runtime().burstSize &&
-            i < config.runtime().eventCount;
-            ++burstIndex, ++i)
+            burstIndex < maxBatchSize &&
+            std::chrono::steady_clock::now() < stopAt &&
+            (config.runtime().eventCount == 0 ||
+                generatedCount < config.runtime().eventCount);
+            ++burstIndex)
         {
             mdp::MarketDataEvent event;
             if (!source.next(event))
@@ -93,6 +115,7 @@ int main(int argc, char** argv)
             if (mdp::protocol::encodeMarketDataEventFrame(event, frame))
             {
                 ++encodedCount;
+                batch.push_back(frame);
             }
             else
             {
@@ -100,7 +123,15 @@ int main(int argc, char** argv)
             }
         }
 
-        if (config.runtime().sleepUs > 0 && i < config.runtime().eventCount)
+        if (!batch.empty())
+        {
+            acceptedCount += client.sendBatch(batch);
+        }
+
+        if (config.runtime().sleepUs > 0 &&
+            std::chrono::steady_clock::now() < stopAt &&
+            (config.runtime().eventCount == 0 ||
+                generatedCount < config.runtime().eventCount))
         {
             std::this_thread::sleep_for(
                 std::chrono::microseconds(config.runtime().sleepUs));
@@ -113,6 +144,7 @@ int main(int argc, char** argv)
 
     std::cout << "Generated events: " << generatedCount << '\n';
     std::cout << "Encoded frames: " << encodedCount << '\n';
+    std::cout << "Accepted by processor: " << acceptedCount << '\n';
     std::cout << "Encode failures: " << encodeFailureCount << '\n';
     std::cout << "Elapsed seconds: " << elapsedSeconds << '\n';
     std::cout << "Encode throughput: "

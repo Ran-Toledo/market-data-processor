@@ -1,5 +1,4 @@
 #include "config/AppConfig.h"
-#include "pipeline/Producer.h"
 #include "pipeline/WorkerPool.h"
 #include "processing/EventProcessor.h"
 
@@ -55,26 +54,26 @@ void runPipelineIntegrationTests()
         .parent_path()
         .parent_path()
         .parent_path()
-        / "tests"
-        / "perf"
-        / "configs"
-        / "queue_policy_block_overload.ini";
+        / "market-data-processor.ini";
     mdp::config::loadFromFile(configPath);
 
     mdp::pipeline::WorkerPool workerPool(2);
-    mdp::pipeline::Producer producer(workerPool);
 
     workerPool.start();
-    producer.start();
+
+    for (mdp::SequenceNumber sequenceNumber = 1; sequenceNumber <= 100; ++sequenceNumber)
+    {
+        assert(workerPool.submit(makeEvent(sequenceNumber, 100.0, 10)));
+    }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     const auto shutdownStart = std::chrono::steady_clock::now();
-    producer.requestStop();
-    workerPool.stop(false);
-    producer.join();
+    workerPool.stop();
     workerPool.join();
     const auto shutdownEnd = std::chrono::steady_clock::now();
+
+    assert(workerPool.getProcessedCount() == 100);
 
     const auto shutdownMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(

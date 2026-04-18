@@ -10,7 +10,7 @@ namespace mdp::config
 {
     enum class QueueFullPolicy
     {
-        BlockProducer,
+        BlockSubmitter,
         DropIncoming
     };
 
@@ -29,7 +29,6 @@ namespace mdp::config
 
     struct RuntimeConfig
     {
-        bool enableLoadTestMode{ false };
         std::size_t appRuntimeSeconds{ 10 };
         std::size_t numWorkers{ 1 };
         std::size_t periodicSummaryIntervalMs{ 1000 };
@@ -44,20 +43,19 @@ namespace mdp::config
         QueueType workerQueueType{ QueueType::BlockingBounded };
     };
 
+    struct NetworkConfig
+    {
+        std::string listenAddress{ "127.0.0.1" };
+        std::uint16_t listenPort{ 19000 };
+        std::size_t maxBatchSize{ 256 };
+    };
+
     struct ReportingConfig
     {
         std::size_t processingStatsLogInterval{ 1000 };
         bool printProcessingStatsSummary{ true };
         bool printQueueMetricsSummary{ true };
         bool printSymbolStatsSummary{ true };
-    };
-
-    struct LoadTestConfig
-    {
-        std::uint32_t processingDelayUs{ 0 };
-        std::size_t optionalBusyWorkIterations{ 0 };
-        std::size_t workerQueueCapacity{ 1024 };
-        QueueType workerQueueType{ QueueType::BlockingBounded };
     };
 
     class AppConfig
@@ -68,18 +66,15 @@ namespace mdp::config
         const LoggingConfig& logging() const { return m_logging; }
         const RuntimeConfig& runtime() const { return m_runtime; }
         const WorkerConfig& worker() const { return m_worker; }
+        const NetworkConfig& network() const { return m_network; }
         const ReportingConfig& reporting() const { return m_reporting; }
-        const LoadTestConfig& loadTest() const { return m_loadTest; }
-
-    private:
-        void applyLoadTestOverrides();
 
     private:
         LoggingConfig m_logging;
         RuntimeConfig m_runtime;
         WorkerConfig m_worker;
+        NetworkConfig m_network;
         ReportingConfig m_reporting;
-        LoadTestConfig m_loadTest;
     };
 
     const AppConfig& get();
