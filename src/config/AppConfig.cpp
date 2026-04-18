@@ -73,9 +73,9 @@ namespace mdp::config
         {
             const std::string normalized = toLower(trim(value));
 
-            if (normalized == "blockproducer" || normalized == "block_producer")
+            if (normalized == "blocksubmitter" || normalized == "block_submitter")
             {
-                return QueueFullPolicy::BlockProducer;
+                return QueueFullPolicy::BlockSubmitter;
             }
 
             if (normalized == "dropincoming" || normalized == "drop_incoming")
@@ -168,11 +168,7 @@ namespace mdp::config
             }
             else if (currentSection == "runtime")
             {
-                if (key == "enable_load_test_mode")
-                {
-                    config.m_runtime.enableLoadTestMode = parseBool(value);
-                }
-                else if (key == "app_runtime_seconds")
+                if (key == "app_runtime_seconds")
                 {
                     config.m_runtime.appRuntimeSeconds = parseSize(value);
                 }
@@ -190,10 +186,6 @@ namespace mdp::config
                         "Unknown runtime key on line " + std::to_string(lineNumber) +
                         ": " + key);
                 }
-            }
-            else if (currentSection == "producer")
-            {
-                continue;
             }
             else if (currentSection == "worker")
             {
@@ -224,6 +216,28 @@ namespace mdp::config
                         ": " + key);
                 }
             }
+            else if (currentSection == "network")
+            {
+                if (key == "listen_address")
+                {
+                    config.m_network.listenAddress = value;
+                }
+                else if (key == "listen_port")
+                {
+                    config.m_network.listenPort =
+                        static_cast<std::uint16_t>(parseUint32(value));
+                }
+                else if (key == "max_batch_size")
+                {
+                    config.m_network.maxBatchSize = parseSize(value);
+                }
+                else
+                {
+                    throw std::runtime_error(
+                        "Unknown network key on line " + std::to_string(lineNumber) +
+                        ": " + key);
+                }
+            }
             else if (currentSection == "reporting")
             {
                 if (key == "processing_stats_log_interval")
@@ -249,31 +263,6 @@ namespace mdp::config
                         ": " + key);
                 }
             }
-            else if (currentSection == "load_test")
-            {
-                if (key == "processing_delay_us")
-                {
-                    config.m_loadTest.processingDelayUs = parseUint32(value);
-                }
-                else if (key == "optional_busy_work_iterations")
-                {
-                    config.m_loadTest.optionalBusyWorkIterations = parseSize(value);
-                }
-                else if (key == "queue_capacity")
-                {
-                    config.m_loadTest.workerQueueCapacity = parseSize(value);
-                }
-                else if (key == "queue_type")
-                {
-                    config.m_loadTest.workerQueueType = parseQueueType(value);
-                }
-                else
-                {
-                    throw std::runtime_error(
-                        "Unknown reporting key on line " + std::to_string(lineNumber) +
-                        ": " + key);
-                }
-            }
             else
             {
                 throw std::runtime_error(
@@ -281,21 +270,7 @@ namespace mdp::config
             }
         }
 
-        config.applyLoadTestOverrides();
         return config;
-    }
-
-    void AppConfig::applyLoadTestOverrides()
-    {
-        if (!m_runtime.enableLoadTestMode)
-        {
-            return;
-        }
-
-        m_worker.processingDelayUs = m_loadTest.processingDelayUs;
-        m_worker.optionalBusyWorkIterations = m_loadTest.optionalBusyWorkIterations;
-        m_worker.workerQueueCapacity = m_loadTest.workerQueueCapacity;
-        m_worker.workerQueueType = m_loadTest.workerQueueType;
     }
 
     const AppConfig& get()

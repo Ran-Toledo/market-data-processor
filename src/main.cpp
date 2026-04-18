@@ -1,6 +1,6 @@
 // main.cpp
 #include "config/AppConfig.h"
-#include "pipeline/Producer.h"
+#include "network/TcpEventReceiver.h"
 #include "pipeline/WorkerPool.h"
 #include "processing/SymbolStats.h"
 
@@ -14,7 +14,7 @@ namespace
 {
     struct ThroughputSample
     {
-        std::size_t producedCount{ 0 };
+        std::uint64_t receivedCount{ 0 };
         std::size_t rejectedCount{ 0 };
         std::uint64_t processedCount{ 0 };
     };
@@ -47,36 +47,24 @@ namespace
             (metrics.maxDepth * 10 >= metrics.capacity * 9);
     }
 
-    void printProducerMode(
-        const mdp::pipeline::Producer& producer,
-        const mdp::pipeline::ProducerOptions& producerOptions)
-    {
-        if (producerOptions.producerCount != producer.getActiveProducerCount())
-        {
-            std::cout << "Configured producerCount="
-                << producerOptions.producerCount
-                << ", using " << producer.getActiveProducerCount()
-                << " producer thread with burst generation." << std::endl;
-        }
-    }
-
     void printPeriodicSummary(
-        const mdp::pipeline::Producer& producer,
+        const mdp::network::TcpEventReceiver& receiver,
         const mdp::pipeline::WorkerPool& workerPool,
         ThroughputSample& previousSample,
         const std::chrono::steady_clock::time_point& previousTime,
         const std::chrono::steady_clock::time_point& currentTime)
     {
         const auto partitionMetrics = workerPool.getPartitionMetrics();
-        const std::size_t producedCount = producer.getProducedCount();
-        const std::size_t rejectedCount = producer.getRejectedCount();
+        const std::uint64_t receivedCount = receiver.getReceivedEventCount();
+        const std::size_t rejectedCount =
+            static_cast<std::size_t>(receiver.getRejectedEventCount());
         const std::uint64_t processedCount = workerPool.getProcessedCount();
 
         const double elapsedSeconds =
             std::chrono::duration_cast<std::chrono::duration<double>>(
                 currentTime - previousTime).count();
 
-        const std::uint64_t producedDelta = producedCount - previousSample.producedCount;
+        const std::uint64_t receivedDelta = receivedCount - previousSample.receivedCount;
         const std::uint64_t rejectedDelta = rejectedCount - previousSample.rejectedCount;
         const std::uint64_t processedDelta = processedCount - previousSample.processedCount;
 
@@ -103,7 +91,7 @@ namespace
             }
         }
 
-        std::cout << "[summary] produced/sec=" << perSecond(producedDelta, elapsedSeconds)
+        std::cout << "[summary] received/sec=" << perSecond(receivedDelta, elapsedSeconds)
             << " processed/sec=" << perSecond(processedDelta, elapsedSeconds)
             << " rejected/sec=" << perSecond(rejectedDelta, elapsedSeconds)
             << " queueDepth=" << totalDepth << '/' << totalCapacity
@@ -112,12 +100,14 @@ namespace
             << " saturatedQueues=" << saturatedQueues << '/' << partitionMetrics.size()
             << std::endl;
 
-        previousSample.producedCount = producedCount;
+        previousSample.receivedCount = receivedCount;
         previousSample.rejectedCount = rejectedCount;
         previousSample.processedCount = processedCount;
     }
 
-    void runForConfiguredDuration(mdp::pipeline::Producer& producer, const mdp::pipeline::WorkerPool& workerPool)
+    void runForConfiguredDuration(
+        const mdp::network::TcpEventReceiver& receiver,
+        const mdp::pipeline::WorkerPool& workerPool)
     {
         const auto startTime = std::chrono::steady_clock::now();
         const auto endTime =
@@ -143,7 +133,7 @@ namespace
 
             const auto summaryTime = std::chrono::steady_clock::now();
             printPeriodicSummary(
-                producer,
+                receiver,
                 workerPool,
                 previousSample,
                 previousSummaryTime,
@@ -153,7 +143,7 @@ namespace
     }
 
     void printProcessingSummary(
-        const mdp::pipeline::Producer& producer,
+        const mdp::network::TcpEventReceiver& receiver,
         const mdp::pipeline::WorkerPool& workerPool,
         double elapsedSeconds)
     {
@@ -162,14 +152,20 @@ namespace
             return;
         }
 
-        const std::size_t producedCount = producer.getProducedCount();
-        const std::size_t rejectedCount = producer.getRejectedCount();
-        const std::size_t generatedCount = producedCount + rejectedCount;
+        const std::uint64_t receivedCount = receiver.getReceivedEventCount();
+        const std::uint64_t submittedCount = receiver.getSubmittedEventCount();
+        const std::uint64_t rejectedCount = receiver.getRejectedEventCount();
         const std::uint64_t processedCount = workerPool.getProcessedCount();
 
-        std::cout << "Generated count: " << generatedCount << std::endl;
-        std::cout << "Accepted count: " << producedCount << std::endl;
+        std::cout << "Accepted connections: "
+            << receiver.getAcceptedConnectionCount() << std::endl;
+        std::cout << "Received count: " << receivedCount << std::endl;
+        std::cout << "Submitted count: " << submittedCount << std::endl;
         std::cout << "Rejected count: " << rejectedCount << std::endl;
+        std::cout << "Decode failures: "
+            << receiver.getDecodeFailureCount() << std::endl;
+        std::cout << "Rejected messages: "
+            << receiver.getRejectedMessageCount() << std::endl;
         std::cout << "Processed count: " << processedCount << std::endl;
         std::cout << "Valid events: " << workerPool.getValidCount() << std::endl;
         std::cout << "Invalid events: " << workerPool.getInvalidCount() << std::endl;
@@ -180,8 +176,10 @@ namespace
             << workerPool.getTrackedStateSymbolCount() << std::endl;
         std::cout << "Tracked symbols in worker-local stats: "
             << workerPool.getTrackedStatsSymbolCount() << std::endl;
-        std::cout << "Produced throughput: "
-            << perSecond(producedCount, elapsedSeconds) << " events/sec" << std::endl;
+        std::cout << "Received throughput: "
+            << perSecond(receivedCount, elapsedSeconds) << " events/sec" << std::endl;
+        std::cout << "Submitted throughput: "
+            << perSecond(submittedCount, elapsedSeconds) << " events/sec" << std::endl;
         std::cout << "Processed throughput: "
             << perSecond(processedCount, elapsedSeconds) << " events/sec" << std::endl;
         std::cout << "Average latency: "
@@ -267,28 +265,27 @@ int main()
     mdp::config::loadFromFile(getConfigPath());
 
     mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
-    mdp::pipeline::ProducerOptions producerOptions;
-    producerOptions.enableEventLogging = mdp::config::get().logging().enableEventLogging;
-    producerOptions.enableStatsLogging =
-        mdp::config::get().logging().enableProcessingStatsLogging;
-    producerOptions.statsLogInterval =
-        mdp::config::get().reporting().processingStatsLogInterval;
-    mdp::pipeline::Producer producer(workerPool, producerOptions);
+    mdp::network::TcpEventReceiverOptions receiverOptions;
+    receiverOptions.listenAddress = mdp::config::get().network().listenAddress;
+    receiverOptions.listenPort = mdp::config::get().network().listenPort;
+    receiverOptions.maxBatchSize = mdp::config::get().network().maxBatchSize;
+    mdp::network::TcpEventReceiver receiver(workerPool, receiverOptions);
 
-    printProducerMode(producer, producerOptions);
     std::cout << "Starting pipeline..." << std::endl;
+    std::cout << "Listening on " << receiverOptions.listenAddress
+        << ':' << receiverOptions.listenPort << std::endl;
 
     workerPool.start();
-    producer.start();
+    receiver.start();
 
     const auto startTime = std::chrono::steady_clock::now();
-    runForConfiguredDuration(producer, workerPool);
+    runForConfiguredDuration(receiver, workerPool);
 
     std::cout << "Stopping pipeline..." << std::endl;
 
-    producer.requestStop();
+    receiver.requestStop();
     workerPool.stop();
-    producer.join();
+    receiver.join();
     workerPool.join();
 
     const auto endTime = std::chrono::steady_clock::now();
@@ -299,7 +296,7 @@ int main()
 
     std::cout << "Elapsed time: " << elapsedSeconds << " seconds" << std::endl;
 
-    printProcessingSummary(producer, workerPool, elapsedSeconds);
+    printProcessingSummary(receiver, workerPool, elapsedSeconds);
     printQueueSummary(workerPool);
     printSymbolSummary(workerPool);
 

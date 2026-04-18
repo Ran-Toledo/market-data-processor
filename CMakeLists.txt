@@ -52,6 +52,9 @@ target_include_directories(market_data_processor
 )
 
 target_link_libraries(market_data_processor PRIVATE mdp_protocol)
+if(WIN32)
+    target_link_libraries(market_data_processor PRIVATE Ws2_32)
+endif()
 
 enable_testing()
 
@@ -73,13 +76,6 @@ add_executable(market_data_processor_tests
     ${MDP_INCLUDE_HEADER_FILES}
 )
 
-add_executable(pipeline_load_experiments
-    tests/perf/PipelineLoadTestRunner.cpp
-    ${MDP_LIBRARY_SOURCE_FILES}
-    ${MDP_SRC_HEADER_FILES}
-    ${MDP_INCLUDE_HEADER_FILES}
-)
-
 target_include_directories(market_data_processor_tests
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
@@ -87,14 +83,9 @@ target_include_directories(market_data_processor_tests
 )
 
 target_link_libraries(market_data_processor_tests PRIVATE mdp_protocol)
-
-target_include_directories(pipeline_load_experiments
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-)
-
-target_link_libraries(pipeline_load_experiments PRIVATE mdp_protocol)
+if(WIN32)
+    target_link_libraries(market_data_processor_tests PRIVATE Ws2_32)
+endif()
 
 add_test(NAME unit.sequence_tracker COMMAND market_data_processor_tests unit.sequence_tracker)
 add_test(NAME unit.event_processor COMMAND market_data_processor_tests unit.event_processor)

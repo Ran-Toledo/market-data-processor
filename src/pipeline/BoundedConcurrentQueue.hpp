@@ -118,7 +118,7 @@ namespace mdp::pipeline
             return false;
         }
 
-        if (m_fullPolicy == config::QueueFullPolicy::BlockProducer)
+        if (m_fullPolicy == config::QueueFullPolicy::BlockSubmitter)
         {
             m_notFullCondition.wait(lock, [this]()
                 {

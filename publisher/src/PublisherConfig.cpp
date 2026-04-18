@@ -88,6 +88,11 @@ namespace mdp::publisher::config
                     config.m_runtime.eventCount =
                         static_cast<std::size_t>(std::stoull(value));
                 }
+                else if (key == "runtime_seconds")
+                {
+                    config.m_runtime.runtimeSeconds =
+                        static_cast<std::uint32_t>(std::stoul(value));
+                }
                 else if (key == "burst_size")
                 {
                     config.m_runtime.burstSize =
@@ -102,6 +107,29 @@ namespace mdp::publisher::config
                 {
                     throw std::runtime_error(
                         "Unknown publisher runtime key on line " +
+                        std::to_string(lineNumber) + ": " + key);
+                }
+            }
+            else if (currentSection == "network")
+            {
+                if (key == "processor_host")
+                {
+                    config.m_network.processorHost = value;
+                }
+                else if (key == "processor_port")
+                {
+                    config.m_network.processorPort =
+                        static_cast<std::uint16_t>(std::stoul(value));
+                }
+                else if (key == "connect_retry_ms")
+                {
+                    config.m_network.connectRetryMs =
+                        static_cast<std::uint32_t>(std::stoul(value));
+                }
+                else
+                {
+                    throw std::runtime_error(
+                        "Unknown publisher network key on line " +
                         std::to_string(lineNumber) + ": " + key);
                 }
             }
