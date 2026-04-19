@@ -1,26 +1,28 @@
 # Architecture
 
-The project is organized around a processor application, an external publisher application, and a shared protocol library.
+The system is organized around an external publisher application, a processor application, and a shared protocol library.
 
 ```text
 market_data_publisher
-  -> publisher source
+  -> IPublisherSource
+  -> MarketDataEvent
   -> mdp_protocol encoder
-  -> TCP publisher client
+  -> TcpPublisherClient
+  -> TCP connection
 
 market_data_processor
-  -> TCP event receiver
+  -> TcpEventReceiver
   -> IEventRouter
   -> WorkerPool
   -> EventProcessor
   -> state/stats/rules/metrics
 ```
 
-## Main Boundaries
+## Boundaries
 
 ### Public API
 
-Public headers live under `include/api`.
+Public domain and protocol headers live under `include/api`.
 
 ```text
 include/api/domain/
@@ -32,15 +34,11 @@ include/api/protocol/
   PortProtocol.h
 ```
 
-`MarketDataEvent` is the in-memory domain event. `MarketDataEventFrame` is the fixed-size binary wire representation. The two should remain separate so internal application fields do not accidentally become wire-protocol commitments.
+`MarketDataEvent` is the in-memory domain event. `MarketDataEventFrame` is the fixed-size wire representation. Keeping them separate prevents internal processor fields from becoming accidental wire-protocol commitments.
 
 ### Protocol Library
 
-The protocol implementation lives in `lib/protocol` and builds as:
-
-```text
-mdp_protocol
-```
+`lib/protocol` builds the shared `mdp_protocol` static library.
 
 Current responsibility:
 
@@ -48,22 +46,22 @@ Current responsibility:
 - Decode `MarketDataEventFrame` into `MarketDataEvent`.
 - Define shared port protocol structs and constants.
 
-Both applications link this library. Protocol encoding/decoding should not be duplicated in publisher and processor code.
+Both applications link this library. Protocol encoding and decoding should stay centralized here.
 
 ### Processor
 
 Processor internals live under `src`.
 
-Important subsystems:
+```text
+src/config      Processor INI parser.
+src/network     Multi-client TCP event receiver.
+src/pipeline    WorkerPool, queue implementations, event router.
+src/processing  Validation, sequence tracking, state, stats, rules.
+src/metrics     Latency and counter collection.
+src/output      Processed-event, alert, and state-change sinks.
+```
 
-- `src/config`: processor configuration.
-- `src/network`: TCP event receiver.
-- `src/pipeline`: routing, worker pool, queues.
-- `src/processing`: validation, sequence handling, rules, state updates, stats aggregation.
-- `src/metrics`: latency and counter collection.
-- `src/output`: processed-event, alert, and state-change sinks.
-
-The processor executable starts `mdp::network::TcpEventReceiver`, accepts publisher connections, decodes event batches, stamps ingest timestamps, and submits events to `IEventRouter`.
+The processor runtime is network-only. It accepts publisher connections, validates protocol messages, reads whole event batches, stamps a batch ingest timestamp, decodes frames, updates batch-level counters, and submits events into the worker pool.
 
 ### Publisher
 
@@ -73,54 +71,57 @@ Current responsibility:
 
 - Load `publisher/config/publisher.ini`.
 - Generate synthetic market data.
+- Support configurable symbol count and symbol offset for sharded publishers.
 - Encode generated events using `mdp_protocol`.
 - Connect to the processor.
 - Send `ClientHello`.
 - Send `EventBatch` messages.
-- Handle `ServerHello` and per-batch `Ack`.
+- Pipeline ACK waits with configurable `ack_window_batches`.
+- Drain pending ACKs before shutdown.
 
-Future responsibility:
+The publisher is a controllable traffic generator, not a second processing engine.
 
-- Handle `Reject`, heartbeat, reconnect behavior, and alternative source adapters.
+## Ingestion Model
 
-The publisher should stay a controllable traffic generator, not a second processing engine.
-
-## Processor Event Flow
+The receiver uses one accept thread plus one session thread per connected publisher, up to `network.max_connections`.
 
 ```text
-TcpEventReceiver
-  -> MessageHeader validation
-  -> EventBatchPayloadHeader validation
-  -> MarketDataEventFrame decode
-  -> ingest timestamp
-  -> IEventRouter
-  -> WorkerPool
+publisher 0 -> TCP session thread 0
+publisher 1 -> TCP session thread 1
+publisher N -> TCP session thread N
+
+session threads
+  -> whole-batch receive
+  -> frame decode
+  -> batch ingest timestamp
+  -> WorkerPool::submit
+```
+
+This mirrors common feed/session-level scaling in real market-data systems. Publishers can be sharded by symbol range:
+
+```text
+publisher 0: symbol_offset=0,   symbol_count=256
+publisher 1: symbol_offset=256, symbol_count=256
+```
+
+## Processing Model
+
+Symbols are deterministically routed to worker partitions. Each worker owns local state, statistics, sequence tracking, risk evaluation, processing latency recording, and queue wait latency recording for the symbols routed to that worker.
+
+```text
+WorkerPool::submit
+  -> hash(symbol) % worker_count
   -> per-worker queue
   -> EventProcessor
   -> validation
   -> sequence tracking
-  -> previous-state lookup
   -> risk rules
   -> state update
   -> symbol stats update
-  -> metrics
+  -> latency metrics
 ```
 
-Symbols are deterministically routed to workers. Each worker owns local state, stats, sequence tracking, metrics, and queue wait latency recording for the symbols routed to that worker.
-
-## Publisher Flow
-
-```text
-market_data_publisher
-  -> IPublisherSource
-  -> MarketDataEvent
-  -> MarketDataEventFrame
-  -> EventBatch
-  -> TCP connection
-  -> Ack
-```
-
-The processor assigns `ingestTimestampNs` when a frame is received and decoded. The worker pool assigns `enqueueTimestampNs` when the event is submitted to a worker queue.
+This keeps same-symbol processing ordered while allowing cross-symbol parallelism.
 
 ## Port Protocol
 
@@ -157,20 +158,21 @@ EventBatchPayloadHeader
 MarketDataEventFrame[eventFrameCount]
 ```
 
+Current default max event frames per batch is `2048`. The default event frame size is `56` bytes.
+
 ## Design Rules
 
 - Keep wire protocol structs shared and versioned.
 - Keep processor-only logic out of the publisher.
-- Keep publisher source adapters out of processor internals.
+- Keep publisher source adapters behind `IPublisherSource`.
 - Do not duplicate frame encoding/decoding.
-- Keep symbol state and stats worker-local.
-- Prefer explicit interfaces at boundaries: source, protocol, transport, router.
-- Add tests at the protocol boundary before expanding socket behavior.
+- Keep same-symbol state single-writer through deterministic routing.
+- Prefer explicit boundaries: source, protocol, transport, router, queue, processor.
+- Use bounded queues and explicit counters for overload visibility.
 
-## Recommended Next Refactors
+## Known Gaps
 
-1. Add loopback integration tests that launch receiver and publisher together.
-2. Add heartbeat and reconnect behavior.
-3. Add `Reject` handling on the publisher side.
-4. Add receive buffer and send buffer tuning options.
-5. Add networked performance profiles that record ingress, decode, queue, and processing metrics separately.
+- No automated loopback integration test launches both executables yet.
+- Heartbeat, reconnect, timeout, and `Reject` handling are incomplete.
+- Ingress metrics are still mostly aggregate counters.
+- Socket buffer and TCP options are not configurable yet.

@@ -231,6 +231,11 @@ namespace mdp::config
                 {
                     config.m_network.maxBatchSize = parseSize(value);
                 }
+                else if (key == "max_connections")
+                {
+                    config.m_network.maxConnections =
+                        std::max<std::size_t>(1, parseSize(value));
+                }
                 else
                 {
                     throw std::runtime_error(

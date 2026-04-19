@@ -14,7 +14,7 @@ namespace mdp::protocol
     inline constexpr std::string_view kDefaultListenAddress = "127.0.0.1";
     inline constexpr std::uint16_t kDefaultListenPort = 19000;
     inline constexpr std::uint32_t kDefaultHeartbeatIntervalMs = 1000;
-    inline constexpr std::uint32_t kDefaultMaxEventFramesPerBatch = 256;
+    inline constexpr std::uint32_t kDefaultMaxEventFramesPerBatch = 2048;
 
     enum class MessageType : std::uint16_t
     {

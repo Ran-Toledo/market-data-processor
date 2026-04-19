@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -129,7 +130,6 @@ namespace mdp::network
     void TcpEventReceiver::requestStop()
     {
         m_running.store(false);
-        closeSocket(m_clientSocket);
         closeSocket(m_listenSocket);
     }
 
@@ -145,6 +145,8 @@ namespace mdp::network
         {
             m_thread.join();
         }
+
+        joinClientThreads();
     }
 
     std::uint64_t TcpEventReceiver::getReceivedEventCount() const
@@ -175,6 +177,23 @@ namespace mdp::network
     std::uint64_t TcpEventReceiver::getRejectedMessageCount() const
     {
         return m_rejectedMessageCount.load();
+    }
+
+    void TcpEventReceiver::joinClientThreads()
+    {
+        std::vector<std::thread> clientThreads;
+        {
+            std::lock_guard<std::mutex> lock(m_clientThreadsMutex);
+            clientThreads.swap(m_clientThreads);
+        }
+
+        for (auto& clientThread : clientThreads)
+        {
+            if (clientThread.joinable())
+            {
+                clientThread.join();
+            }
+        }
     }
 
     void TcpEventReceiver::receiveLoop()
@@ -232,164 +251,23 @@ namespace mdp::network
                     continue;
                 }
 
-                m_clientSocket.store(static_cast<std::uintptr_t>(clientSocket));
-                m_acceptedConnectionCount.fetch_add(1);
-
-                protocol::MessageHeader helloHeader;
-                protocol::ClientHelloPayload helloPayload;
-                if (!receiveExact(clientSocket, &helloHeader, sizeof(helloHeader)) ||
-                    !protocol::isValidMessageHeader(helloHeader) ||
-                    helloHeader.type != protocol::MessageType::ClientHello ||
-                    helloHeader.payloadSize != sizeof(helloPayload) ||
-                    !receiveExact(clientSocket, &helloPayload, sizeof(helloPayload)))
+                if (m_activeConnectionCount.load() >= m_options.maxConnections)
                 {
                     m_rejectedMessageCount.fetch_add(1);
                     closesocket(clientSocket);
-                    m_clientSocket.store(0);
                     continue;
                 }
 
-                protocol::ServerHelloPayload serverHello;
-                serverHello.maxEventFramesPerBatch = static_cast<std::uint32_t>(
-                    std::min<std::size_t>(
-                        m_options.maxBatchSize,
-                        protocol::kDefaultMaxEventFramesPerBatch));
-                protocol::MessageHeader serverHelloHeader = protocol::makeMessageHeader(
-                    protocol::MessageType::ServerHello,
-                    sizeof(serverHello),
-                    1);
+                m_acceptedConnectionCount.fetch_add(1);
+                m_activeConnectionCount.fetch_add(1);
 
-                if (!sendExact(clientSocket, &serverHelloHeader, sizeof(serverHelloHeader)) ||
-                    !sendExact(clientSocket, &serverHello, sizeof(serverHello)))
                 {
-                    closesocket(clientSocket);
-                    m_clientSocket.store(0);
-                    continue;
+                    std::lock_guard<std::mutex> lock(m_clientThreadsMutex);
+                    m_clientThreads.emplace_back(
+                        &TcpEventReceiver::handleClient,
+                        this,
+                        static_cast<std::uintptr_t>(clientSocket));
                 }
-
-                while (m_running.load())
-                {
-                    protocol::MessageHeader header;
-                    if (!receiveExact(clientSocket, &header, sizeof(header)))
-                    {
-                        break;
-                    }
-
-                    if (!protocol::isValidMessageHeader(header))
-                    {
-                        m_rejectedMessageCount.fetch_add(1);
-                        const auto reject = makeReject(
-                            header.messageSequence,
-                            protocol::RejectReason::UnsupportedVersion);
-                        const auto rejectHeader = protocol::makeMessageHeader(
-                            protocol::MessageType::Reject,
-                            sizeof(reject),
-                            header.messageSequence);
-                        sendExact(clientSocket, &rejectHeader, sizeof(rejectHeader));
-                        sendExact(clientSocket, &reject, sizeof(reject));
-                        break;
-                    }
-
-                    if (header.type == protocol::MessageType::Heartbeat)
-                    {
-                        std::vector<char> payload(header.payloadSize);
-                        if (header.payloadSize > 0 &&
-                            !receiveExact(
-                                clientSocket,
-                                payload.data(),
-                                static_cast<int>(payload.size())))
-                        {
-                            break;
-                        }
-
-                        continue;
-                    }
-
-                    if (header.type != protocol::MessageType::EventBatch)
-                    {
-                        m_rejectedMessageCount.fetch_add(1);
-                        break;
-                    }
-
-                    protocol::EventBatchPayloadHeader batchHeader;
-                    if (header.payloadSize < sizeof(batchHeader) ||
-                        !receiveExact(clientSocket, &batchHeader, sizeof(batchHeader)))
-                    {
-                        m_rejectedMessageCount.fetch_add(1);
-                        break;
-                    }
-
-                    const std::uint32_t expectedPayloadSize =
-                        protocol::eventBatchPayloadSize(batchHeader.eventFrameCount);
-
-                    if (batchHeader.eventFrameCount == 0 ||
-                        batchHeader.eventFrameCount > m_options.maxBatchSize ||
-                        batchHeader.eventFrameSize != sizeof(protocol::MarketDataEventFrame) ||
-                        header.payloadSize != expectedPayloadSize)
-                    {
-                        m_rejectedMessageCount.fetch_add(1);
-                        break;
-                    }
-
-                    std::uint64_t acceptedInBatch = 0;
-                    bool batchReadFailed = false;
-
-                    for (std::uint32_t i = 0; i < batchHeader.eventFrameCount; ++i)
-                    {
-                        protocol::MarketDataEventFrame frame;
-                        if (!receiveExact(clientSocket, &frame, sizeof(frame)))
-                        {
-                            m_rejectedMessageCount.fetch_add(1);
-                            batchReadFailed = true;
-                            break;
-                        }
-
-                        MarketDataEvent event;
-                        const auto decodeResult =
-                            protocol::decodeMarketDataEventFrame(frame, event);
-
-                        if (!decodeResult.ok)
-                        {
-                            m_decodeFailureCount.fetch_add(1);
-                            continue;
-                        }
-
-                        event.ingestTimestampNs = clock::nowNs();
-                        m_receivedEventCount.fetch_add(1);
-
-                        if (m_eventRouter.submit(event))
-                        {
-                            ++acceptedInBatch;
-                            m_submittedEventCount.fetch_add(1);
-                        }
-                        else
-                        {
-                            m_rejectedEventCount.fetch_add(1);
-                        }
-                    }
-
-                    if (batchReadFailed)
-                    {
-                        break;
-                    }
-
-                    protocol::AckPayload ack;
-                    ack.acknowledgedMessageSequence = header.messageSequence;
-                    ack.acceptedEventCount = acceptedInBatch;
-                    const auto ackHeader = protocol::makeMessageHeader(
-                        protocol::MessageType::Ack,
-                        sizeof(ack),
-                        header.messageSequence);
-
-                    if (!sendExact(clientSocket, &ackHeader, sizeof(ackHeader)) ||
-                        !sendExact(clientSocket, &ack, sizeof(ack)))
-                    {
-                        break;
-                    }
-                }
-
-                closesocket(clientSocket);
-                m_clientSocket.store(0);
             }
         }
         catch (const std::exception& ex)
@@ -400,7 +278,184 @@ namespace mdp::network
             }
         }
 
-        closeSocket(m_clientSocket);
         closeSocket(m_listenSocket);
+        joinClientThreads();
+    }
+
+    void TcpEventReceiver::handleClient(std::uintptr_t rawClientSocket)
+    {
+        const SOCKET clientSocket = static_cast<SOCKET>(rawClientSocket);
+
+        try
+        {
+            protocol::MessageHeader helloHeader;
+            protocol::ClientHelloPayload helloPayload;
+            if (!receiveExact(clientSocket, &helloHeader, sizeof(helloHeader)) ||
+                !protocol::isValidMessageHeader(helloHeader) ||
+                helloHeader.type != protocol::MessageType::ClientHello ||
+                helloHeader.payloadSize != sizeof(helloPayload) ||
+                !receiveExact(clientSocket, &helloPayload, sizeof(helloPayload)))
+            {
+                m_rejectedMessageCount.fetch_add(1);
+                closesocket(clientSocket);
+                m_activeConnectionCount.fetch_sub(1);
+                return;
+            }
+
+            protocol::ServerHelloPayload serverHello;
+            serverHello.maxEventFramesPerBatch = static_cast<std::uint32_t>(
+                std::min<std::size_t>(
+                    m_options.maxBatchSize,
+                    protocol::kDefaultMaxEventFramesPerBatch));
+            protocol::MessageHeader serverHelloHeader = protocol::makeMessageHeader(
+                protocol::MessageType::ServerHello,
+                sizeof(serverHello),
+                1);
+
+            if (!sendExact(clientSocket, &serverHelloHeader, sizeof(serverHelloHeader)) ||
+                !sendExact(clientSocket, &serverHello, sizeof(serverHello)))
+            {
+                closesocket(clientSocket);
+                m_activeConnectionCount.fetch_sub(1);
+                return;
+            }
+
+            while (m_running.load())
+            {
+                protocol::MessageHeader header;
+                if (!receiveExact(clientSocket, &header, sizeof(header)))
+                {
+                    break;
+                }
+
+                if (!protocol::isValidMessageHeader(header))
+                {
+                    m_rejectedMessageCount.fetch_add(1);
+                    const auto reject = makeReject(
+                        header.messageSequence,
+                        protocol::RejectReason::UnsupportedVersion);
+                    const auto rejectHeader = protocol::makeMessageHeader(
+                        protocol::MessageType::Reject,
+                        sizeof(reject),
+                        header.messageSequence);
+                    sendExact(clientSocket, &rejectHeader, sizeof(rejectHeader));
+                    sendExact(clientSocket, &reject, sizeof(reject));
+                    break;
+                }
+
+                if (header.type == protocol::MessageType::Heartbeat)
+                {
+                    std::vector<char> payload(header.payloadSize);
+                    if (header.payloadSize > 0 &&
+                        !receiveExact(
+                            clientSocket,
+                            payload.data(),
+                            static_cast<int>(payload.size())))
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
+                if (header.type != protocol::MessageType::EventBatch)
+                {
+                    m_rejectedMessageCount.fetch_add(1);
+                    break;
+                }
+
+                protocol::EventBatchPayloadHeader batchHeader;
+                if (header.payloadSize < sizeof(batchHeader) ||
+                    !receiveExact(clientSocket, &batchHeader, sizeof(batchHeader)))
+                {
+                    m_rejectedMessageCount.fetch_add(1);
+                    break;
+                }
+
+                const std::uint32_t expectedPayloadSize =
+                    protocol::eventBatchPayloadSize(batchHeader.eventFrameCount);
+
+                if (batchHeader.eventFrameCount == 0 ||
+                    batchHeader.eventFrameCount > m_options.maxBatchSize ||
+                    batchHeader.eventFrameSize != sizeof(protocol::MarketDataEventFrame) ||
+                    header.payloadSize != expectedPayloadSize)
+                {
+                    m_rejectedMessageCount.fetch_add(1);
+                    break;
+                }
+
+                std::vector<protocol::MarketDataEventFrame> frames(
+                    batchHeader.eventFrameCount);
+                if (!receiveExact(
+                    clientSocket,
+                    frames.data(),
+                    static_cast<int>(
+                        frames.size() * sizeof(protocol::MarketDataEventFrame))))
+                {
+                    m_rejectedMessageCount.fetch_add(1);
+                    break;
+                }
+
+                const TimestampNs batchIngestTimestampNs = clock::nowNs();
+                std::uint64_t receivedInBatch = 0;
+                std::uint64_t acceptedInBatch = 0;
+                std::uint64_t rejectedInBatch = 0;
+                std::uint64_t decodeFailuresInBatch = 0;
+
+                for (const auto& frame : frames)
+                {
+                    MarketDataEvent event;
+                    const auto decodeResult =
+                        protocol::decodeMarketDataEventFrame(frame, event);
+
+                    if (!decodeResult.ok)
+                    {
+                        ++decodeFailuresInBatch;
+                        continue;
+                    }
+
+                    event.ingestTimestampNs = batchIngestTimestampNs;
+                    ++receivedInBatch;
+
+                    if (m_eventRouter.submit(event))
+                    {
+                        ++acceptedInBatch;
+                    }
+                    else
+                    {
+                        ++rejectedInBatch;
+                    }
+                }
+
+                m_receivedEventCount.fetch_add(receivedInBatch);
+                m_submittedEventCount.fetch_add(acceptedInBatch);
+                m_rejectedEventCount.fetch_add(rejectedInBatch);
+                m_decodeFailureCount.fetch_add(decodeFailuresInBatch);
+
+                protocol::AckPayload ack;
+                ack.acknowledgedMessageSequence = header.messageSequence;
+                ack.acceptedEventCount = acceptedInBatch;
+                const auto ackHeader = protocol::makeMessageHeader(
+                    protocol::MessageType::Ack,
+                    sizeof(ack),
+                    header.messageSequence);
+
+                if (!sendExact(clientSocket, &ackHeader, sizeof(ackHeader)) ||
+                    !sendExact(clientSocket, &ack, sizeof(ack)))
+                {
+                    break;
+                }
+            }
+        }
+        catch (const std::exception& ex)
+        {
+            if (m_running.load())
+            {
+                std::cerr << "TCP client session stopped: " << ex.what() << '\n';
+            }
+        }
+
+        closesocket(clientSocket);
+        m_activeConnectionCount.fetch_sub(1);
     }
 }

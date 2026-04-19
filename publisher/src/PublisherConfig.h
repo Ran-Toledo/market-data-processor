@@ -20,11 +20,14 @@ namespace mdp::publisher::config
         std::string processorHost{ "127.0.0.1" };
         std::uint16_t processorPort{ 19000 };
         std::uint32_t connectRetryMs{ 1000 };
+        std::size_t ackWindowBatches{ 1 };
     };
 
     struct SourceConfig
     {
         std::string sourceType{ "synthetic" };
+        std::size_t symbolCount{ 32 };
+        std::size_t symbolOffset{ 0 };
     };
 
     class PublisherConfig

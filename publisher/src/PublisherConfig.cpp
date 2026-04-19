@@ -126,6 +126,13 @@ namespace mdp::publisher::config
                     config.m_network.connectRetryMs =
                         static_cast<std::uint32_t>(std::stoul(value));
                 }
+                else if (key == "ack_window_batches")
+                {
+                    config.m_network.ackWindowBatches =
+                        std::max<std::size_t>(
+                            1,
+                            static_cast<std::size_t>(std::stoull(value)));
+                }
                 else
                 {
                     throw std::runtime_error(
@@ -138,6 +145,16 @@ namespace mdp::publisher::config
                 if (key == "source_type")
                 {
                     config.m_source.sourceType = toLower(value);
+                }
+                else if (key == "symbol_count")
+                {
+                    config.m_source.symbolCount =
+                        static_cast<std::size_t>(std::stoull(value));
+                }
+                else if (key == "symbol_offset")
+                {
+                    config.m_source.symbolOffset =
+                        static_cast<std::size_t>(std::stoull(value));
                 }
                 else
                 {

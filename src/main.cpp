@@ -25,6 +25,76 @@ namespace
             / "market-data-processor.ini";
     }
 
+    const char* queueFullPolicyName(mdp::config::QueueFullPolicy policy)
+    {
+        switch (policy)
+        {
+        case mdp::config::QueueFullPolicy::BlockSubmitter:
+            return "block_submitter";
+        case mdp::config::QueueFullPolicy::DropIncoming:
+            return "drop_incoming";
+        }
+
+        return "unknown";
+    }
+
+    const char* queueTypeName(mdp::config::QueueType queueType)
+    {
+        switch (queueType)
+        {
+        case mdp::config::QueueType::BlockingBounded:
+            return "blocking_bounded";
+        case mdp::config::QueueType::LockFreeRing:
+            return "lock_free_ring";
+        }
+
+        return "unknown";
+    }
+
+    void printStartupConfig(const std::filesystem::path& configPath)
+    {
+        const auto& config = mdp::config::get();
+
+        std::cout << "Initializing market_data_processor" << std::endl;
+        std::cout << "Config file: " << configPath << std::endl;
+        std::cout << "Runtime config:" << std::endl;
+        std::cout << "  app_runtime_seconds="
+            << config.runtime().appRuntimeSeconds << std::endl;
+        std::cout << "  num_workers=" << config.runtime().numWorkers << std::endl;
+        std::cout << "  periodic_summary_interval_ms="
+            << config.runtime().periodicSummaryIntervalMs << std::endl;
+        std::cout << "Worker config:" << std::endl;
+        std::cout << "  processing_delay_us="
+            << config.worker().processingDelayUs << std::endl;
+        std::cout << "  optional_busy_work_iterations="
+            << config.worker().optionalBusyWorkIterations << std::endl;
+        std::cout << "  queue_capacity="
+            << config.worker().workerQueueCapacity << std::endl;
+        std::cout << "  queue_full_policy="
+            << queueFullPolicyName(config.worker().workerQueueFullStrategy)
+            << std::endl;
+        std::cout << "  queue_type="
+            << queueTypeName(config.worker().workerQueueType) << std::endl;
+        std::cout << "Network config:" << std::endl;
+        std::cout << "  listen_address="
+            << config.network().listenAddress << std::endl;
+        std::cout << "  listen_port=" << config.network().listenPort << std::endl;
+        std::cout << "  max_batch_size="
+            << config.network().maxBatchSize << std::endl;
+        std::cout << "  max_connections="
+            << config.network().maxConnections << std::endl;
+        std::cout << "Reporting config:" << std::endl;
+        std::cout << "  print_processing_stats_summary="
+            << (config.reporting().printProcessingStatsSummary ? "true" : "false")
+            << std::endl;
+        std::cout << "  print_queue_metrics_summary="
+            << (config.reporting().printQueueMetricsSummary ? "true" : "false")
+            << std::endl;
+        std::cout << "  print_symbol_stats_summary="
+            << (config.reporting().printSymbolStatsSummary ? "true" : "false")
+            << std::endl;
+    }
+
     double perSecond(std::uint64_t count, double elapsedSeconds)
     {
         if (elapsedSeconds <= 0.0)
@@ -262,31 +332,38 @@ namespace
 
 int main()
 {
-    mdp::config::loadFromFile(getConfigPath());
+    const auto configPath = getConfigPath();
+    mdp::config::loadFromFile(configPath);
+    printStartupConfig(configPath);
 
     mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
     mdp::network::TcpEventReceiverOptions receiverOptions;
     receiverOptions.listenAddress = mdp::config::get().network().listenAddress;
     receiverOptions.listenPort = mdp::config::get().network().listenPort;
     receiverOptions.maxBatchSize = mdp::config::get().network().maxBatchSize;
+    receiverOptions.maxConnections = mdp::config::get().network().maxConnections;
     mdp::network::TcpEventReceiver receiver(workerPool, receiverOptions);
 
-    std::cout << "Starting pipeline..." << std::endl;
+    std::cout << "Starting processor pipeline..." << std::endl;
     std::cout << "Listening on " << receiverOptions.listenAddress
-        << ':' << receiverOptions.listenPort << std::endl;
+        << ':' << receiverOptions.listenPort
+        << " max_connections=" << receiverOptions.maxConnections << std::endl;
 
     workerPool.start();
     receiver.start();
+    std::cout << "Processor startup complete." << std::endl;
 
     const auto startTime = std::chrono::steady_clock::now();
     runForConfiguredDuration(receiver, workerPool);
 
-    std::cout << "Stopping pipeline..." << std::endl;
+    std::cout << "Processor runtime elapsed; shutdown requested." << std::endl;
+    std::cout << "Stopping TCP receiver and worker pool..." << std::endl;
 
     receiver.requestStop();
     workerPool.stop();
     receiver.join();
     workerPool.join();
+    std::cout << "Processor shutdown complete." << std::endl;
 
     const auto endTime = std::chrono::steady_clock::now();
     const auto elapsedMs =

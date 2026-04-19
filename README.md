@@ -1,39 +1,38 @@
 # Market Data Processor
 
-A C++ market-data processing pipeline focused on low-latency ingestion, deterministic per-symbol routing, bounded queueing, event validation, per-symbol state/statistics, and performance benchmarking.
+A C++ market-data processing pipeline focused on networked ingestion, deterministic per-symbol routing, bounded queueing, validation, worker-local state/statistics, and throughput/latency measurement.
 
-The project separates the processor from the market-data publisher boundary:
+The project is split across three main runtime boundaries:
 
 - `market_data_processor`: the processing application and TCP event receiver.
-- `market_data_publisher`: an external synthetic traffic-generator application under `publisher/`.
+- `market_data_publisher`: an external synthetic market-data publisher under `publisher/`.
 - `mdp_protocol`: a shared static protocol library under `lib/protocol`.
-- `include/api`: public domain and wire-protocol headers used by both apps.
 
-The processor executable listens for TCP batches from the external publisher. Synthetic market-data generation lives in the publisher process, not inside the processor runtime.
+The processor does not generate synthetic events internally. Publishers connect over TCP, send framed event batches, and receive ACKs from the processor.
 
 ## Repository Layout
 
 ```text
 include/api/
   domain/        Shared market-data domain types.
-  protocol/      Shared wire-frame and port protocol API.
+  protocol/      Shared wire-frame and port protocol headers.
 
-lib/protocol/    Shared protocol implementation, built as mdp_protocol.
+lib/protocol/    Shared frame encode/decode implementation.
 
 src/             Processor application internals.
   config/        Processor config parser.
-  network/       TCP event receiver.
+  network/       Multi-client TCP event receiver.
   pipeline/      WorkerPool, queues, event router.
   processing/    Validation, sequence tracking, state, stats, rules.
   metrics/       Latency and throughput counters.
   output/        Event sink interfaces.
 
-publisher/       External publisher traffic generator.
+publisher/
   config/        Publisher config.
-  src/           Publisher app, source interface, synthetic source, TCP client.
+  src/           Publisher app, synthetic source, TCP client.
 
-tests/           Unit, integration, and performance test runner.
-tools/           Offline performance analysis tools.
+tests/           Unit and integration tests.
+tools/           Run and benchmark helper scripts.
 docs/            Architecture and performance notes.
 ```
 
@@ -56,25 +55,46 @@ build\Debug\market_data_processor_tests.exe
 build\publisher\Release\market_data_publisher.exe
 ```
 
-## Run Processor And Publisher
+## Run
 
-Start the processor first:
+Run the default processor plus publisher pipeline:
+
+```powershell
+.\run_pipeline.bat
+```
+
+The default run launches:
+
+```text
+2 publisher processes
+4 processor workers
+1024-event publisher batches
+ACK window of 4 batches
+256 symbols per publisher
+8192 events per worker queue
+```
+
+The script writes logs under:
+
+```text
+results\run_<timestamp>\
+```
+
+The batch file forwards arguments to the PowerShell runner, so the run is configurable:
+
+```powershell
+.\run_pipeline.bat -PublisherCount 1 -Workers 2 -BatchSize 512
+.\run_pipeline.bat -PublisherCount 4 -Workers 8 -QueueCapacity 16384
+```
+
+You can also run the executables manually:
 
 ```powershell
 .\build\Release\market_data_processor.exe
-```
-
-Then start the publisher in another terminal:
-
-```powershell
 .\build\publisher\Release\market_data_publisher.exe
 ```
 
-Default TCP endpoint:
-
-```text
-127.0.0.1:19000
-```
+## Configuration
 
 Processor configuration:
 
@@ -88,20 +108,47 @@ Publisher configuration:
 publisher\config\publisher.ini
 ```
 
-The publisher generates synthetic events, encodes them with `mdp_protocol`, sends `EventBatch` messages over TCP, and waits for processor `Ack` messages.
+Current defaults are tuned for a high-throughput local loopback run:
 
-## Networked Performance Smoke Test
-
-```powershell
-.\build.bat
-.\run_performance_tests.bat
+```text
+processor workers:       4
+processor max clients:   2
+processor max batch:     2048
+worker queue capacity:   8192
+publisher batch size:    1024
+publisher ACK window:    4
+symbols per publisher:   256
 ```
 
-The performance script launches the processor and external publisher together, captures both outputs under `results/`, and reports the end-to-end TCP ingestion path. Use this path for throughput and latency tuning.
+Both executables print their loaded configuration, startup status, shutdown status, and final counters to stdout.
+
+## Performance
+
+The current best local loopback run processed nearly 2M events/sec:
+
+```text
+publishers:          2
+workers:             4
+processed events:    9,868,948
+processed throughput: 1.96671e+06 events/sec
+drops/rejects:       0
+decode failures:     0
+sequence gaps:       0
+```
+
+Use the multi-publisher runner for controlled experiments:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\run_multi_publisher_performance_test.ps1 -PublisherCount 2 -Workers 4
+```
+
+See [docs/performance-load-tests.md](docs/performance-load-tests.md) and [docs/performance-notes.md](docs/performance-notes.md).
 
 ## Current Capabilities
 
-- TCP publisher-to-processor event batch transport.
+- Multi-client TCP publisher-to-processor ingestion.
+- External synthetic publishers with configurable symbol sharding.
+- ACK pipelining with configurable in-flight batch window.
 - Shared binary event frame API.
 - Shared port protocol structs for processor/publisher IPC.
 - Deterministic symbol-to-worker routing.
@@ -112,12 +159,11 @@ The performance script launches the processor and external publisher together, c
 - Queue metrics and queue wait latency metrics.
 - Throughput and latency reporting.
 - Unit and integration test coverage for core processing components.
-- Networked publisher/processor smoke testing.
 
-## Suggested Next Improvements
+## Next Improvements
 
-1. Add automated loopback integration tests for publisher-to-processor TCP batches.
-2. Add reconnect, heartbeat, and timeout behavior.
-3. Add publisher handling for server `Reject` messages.
+1. Add automated loopback integration tests that launch processor and publisher together.
+2. Add reconnect, heartbeat, timeout, and publisher-side `Reject` handling.
+3. Add structured CSV output for interval-level publisher and processor metrics.
 4. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
-5. Add networked benchmark CSV output for publisher and processor interval samples.
+5. Add socket send/receive buffer and TCP option configuration.

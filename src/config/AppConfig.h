@@ -48,6 +48,7 @@ namespace mdp::config
         std::string listenAddress{ "127.0.0.1" };
         std::uint16_t listenPort{ 19000 };
         std::size_t maxBatchSize{ 256 };
+        std::size_t maxConnections{ 1 };
     };
 
     struct ReportingConfig

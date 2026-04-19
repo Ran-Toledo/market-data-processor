@@ -53,6 +53,33 @@ namespace
 
         return static_cast<double>(count) / elapsedSeconds;
     }
+
+    void printStartupConfig(
+        const std::filesystem::path& configPath,
+        const mdp::publisher::config::PublisherConfig& config)
+    {
+        std::cout << "Initializing market_data_publisher" << '\n';
+        std::cout << "Config file: " << configPath << '\n';
+        std::cout << "Runtime config:" << '\n';
+        std::cout << "  event_count=" << config.runtime().eventCount << '\n';
+        std::cout << "  runtime_seconds="
+            << config.runtime().runtimeSeconds << '\n';
+        std::cout << "  burst_size=" << config.runtime().burstSize << '\n';
+        std::cout << "  sleep_us=" << config.runtime().sleepUs << '\n';
+        std::cout << "Network config:" << '\n';
+        std::cout << "  processor_host="
+            << config.network().processorHost << '\n';
+        std::cout << "  processor_port="
+            << config.network().processorPort << '\n';
+        std::cout << "  connect_retry_ms="
+            << config.network().connectRetryMs << '\n';
+        std::cout << "  ack_window_batches="
+            << config.network().ackWindowBatches << '\n';
+        std::cout << "Source config:" << '\n';
+        std::cout << "  source_type=" << config.source().sourceType << '\n';
+        std::cout << "  symbol_count=" << config.source().symbolCount << '\n';
+        std::cout << "  symbol_offset=" << config.source().symbolOffset << '\n';
+    }
 }
 
 int main(int argc, char** argv)
@@ -60,6 +87,7 @@ int main(int argc, char** argv)
     const PublisherOptions options = parseOptions(argc, argv);
     const mdp::publisher::config::PublisherConfig config =
         mdp::publisher::config::PublisherConfig::loadFromIni(options.configPath);
+    printStartupConfig(options.configPath, config);
 
     if (config.source().sourceType != "synthetic")
     {
@@ -68,16 +96,24 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    mdp::publisher::SyntheticPublisherSource source;
+    mdp::publisher::SyntheticPublisherSource source(
+        config.source().symbolCount,
+        config.source().symbolOffset);
     mdp::publisher::TcpPublisherClientOptions clientOptions;
     clientOptions.processorHost = config.network().processorHost;
     clientOptions.processorPort = config.network().processorPort;
     clientOptions.connectRetryMs = config.network().connectRetryMs;
     clientOptions.maxBatchSize = static_cast<std::uint32_t>(config.runtime().burstSize);
+    clientOptions.ackWindowBatches = config.network().ackWindowBatches;
     mdp::publisher::TcpPublisherClient client(clientOptions);
+    std::cout << "Connecting to processor at "
+        << clientOptions.processorHost << ':' << clientOptions.processorPort
+        << "..." << '\n';
     client.connect();
 
     const std::size_t maxBatchSize = static_cast<std::size_t>(client.maxBatchSize());
+    std::cout << "Publisher startup complete. negotiated_max_batch_size="
+        << maxBatchSize << '\n';
     std::size_t generatedCount = 0;
     std::size_t encodedCount = 0;
     std::size_t encodeFailureCount = 0;
@@ -137,6 +173,10 @@ int main(int argc, char** argv)
                 std::chrono::microseconds(config.runtime().sleepUs));
         }
     }
+
+    std::cout << "Publisher runtime elapsed; flushing pending ACKs..." << '\n';
+    acceptedCount += client.flushAcks();
+    std::cout << "Publisher shutdown complete." << '\n';
 
     const auto end = std::chrono::steady_clock::now();
     const double elapsedSeconds =
