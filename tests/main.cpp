@@ -11,7 +11,6 @@ void runPortProtocolTests();
 void runRiskRuleEvaluatorTests();
 void runSymbolStatsTests();
 void runSymbolStateStoreTests();
-void runPipelineIntegrationTests();
 
 namespace
 {
@@ -77,12 +76,6 @@ namespace
             return true;
         }
 
-        if (suiteName == "integration.pipeline")
-        {
-            runPipelineIntegrationTests();
-            return true;
-        }
-
         return false;
     }
 }
@@ -112,8 +105,7 @@ int main(int argc, char** argv)
         "unit.port_protocol",
         "unit.risk_rule_evaluator",
         "unit.symbol_stats",
-        "unit.symbol_state_store",
-        "integration.pipeline"
+        "unit.symbol_state_store"
     };
 
     for (const char* suiteName : allSuites)

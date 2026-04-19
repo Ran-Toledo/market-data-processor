@@ -8,6 +8,7 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <string>
 #include <thread>
 
 namespace
@@ -19,10 +20,36 @@ namespace
         std::uint64_t processedCount{ 0 };
     };
 
+    struct ProcessorOptions
+    {
+        std::filesystem::path configPath;
+    };
+
     std::filesystem::path getConfigPath()
     {
         return std::filesystem::path(__FILE__).parent_path().parent_path()
             / "market-data-processor.ini";
+    }
+
+    ProcessorOptions parseOptions(int argc, char** argv)
+    {
+        ProcessorOptions options;
+
+        for (int i = 1; i < argc; ++i)
+        {
+            const std::string arg = argv[i];
+            if (arg == "--config" && i + 1 < argc)
+            {
+                options.configPath = argv[++i];
+            }
+        }
+
+        if (options.configPath.empty())
+        {
+            options.configPath = getConfigPath();
+        }
+
+        return options;
     }
 
     const char* queueFullPolicyName(mdp::config::QueueFullPolicy policy)
@@ -330,11 +357,11 @@ namespace
     }
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    const auto configPath = getConfigPath();
-    mdp::config::loadFromFile(configPath);
-    printStartupConfig(configPath);
+    const ProcessorOptions options = parseOptions(argc, argv);
+    mdp::config::loadFromFile(options.configPath);
+    printStartupConfig(options.configPath);
 
     mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
     mdp::network::TcpEventReceiverOptions receiverOptions;

@@ -172,7 +172,7 @@ Current default max event frames per batch is `2048`. The default event frame si
 
 ## Known Gaps
 
-- No automated loopback integration test launches both executables yet.
 - Heartbeat, reconnect, timeout, and `Reject` handling are incomplete.
 - Ingress metrics are still mostly aggregate counters.
 - Socket buffer and TCP options are not configurable yet.
+- Automated loopback coverage currently exercises one publisher connection; multi-publisher CTest coverage is still pending.

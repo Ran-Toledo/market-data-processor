@@ -98,7 +98,7 @@ Avoid judging throughput from a single publisher if the target workload expects 
 
 ## Current Risks
 
-1. Multi-executable loopback behavior is covered by scripts, not automated CTest integration.
+1. Multi-executable loopback behavior is covered by CTest for one publisher connection; multi-publisher automated coverage is still pending.
 2. `Reject`, heartbeat, reconnect, and timeout handling are incomplete.
 3. Run output is text logs rather than structured benchmark CSVs.
 4. Socket buffer sizing and TCP options are not configurable yet.
@@ -108,7 +108,7 @@ Avoid judging throughput from a single publisher if the target workload expects 
 
 ### Correctness
 
-- Add CTest integration that launches processor and publisher together.
+- Add CTest integration for multiple sharded publishers.
 - Add malformed `MessageHeader` tests.
 - Add oversized batch rejection tests.
 - Add protocol version rejection tests.

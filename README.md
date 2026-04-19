@@ -162,8 +162,8 @@ See [docs/performance-load-tests.md](docs/performance-load-tests.md) and [docs/p
 
 ## Next Improvements
 
-1. Add automated loopback integration tests that launch processor and publisher together.
-2. Add reconnect, heartbeat, timeout, and publisher-side `Reject` handling.
-3. Add structured CSV output for interval-level publisher and processor metrics.
-4. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
-5. Add socket send/receive buffer and TCP option configuration.
+1. Add reconnect, heartbeat, timeout, and publisher-side `Reject` handling.
+2. Add structured CSV output for interval-level publisher and processor metrics.
+3. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
+4. Add socket send/receive buffer and TCP option configuration.
+5. Add multi-publisher integration coverage for sharded symbols.
