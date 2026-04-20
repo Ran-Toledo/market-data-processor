@@ -36,6 +36,9 @@ $resultsDir = Join-Path $repoRoot "results\run_$timestamp"
 New-Item -ItemType Directory -Force $resultsDir | Out-Null
 
 function Write-ProcessorConfig {
+    $processorMetricsCsv = Join-Path $resultsDir "processor-metrics.csv"
+    $symbolStatsCsv = Join-Path $resultsDir "symbol-stats.csv"
+
     @"
 [logging]
 enable_event_logging = false
@@ -65,14 +68,25 @@ processing_stats_log_interval = 1000
 print_processing_stats_summary = true
 print_queue_metrics_summary = true
 print_symbol_stats_summary = false
+
+[export]
+enable_processed_events_csv = false
+processed_events_csv_path = $(Join-Path $resultsDir "processed-events.csv")
+enable_processor_metrics_csv = true
+processor_metrics_csv_path = $processorMetricsCsv
+enable_symbol_stats_csv = true
+symbol_stats_csv_path = $symbolStatsCsv
 "@ | Set-Content -LiteralPath $processorIni -NoNewline
 }
 
 function Write-PublisherConfig {
     param(
         [string]$Path,
-        [int]$SymbolOffset
+        [int]$SymbolOffset,
+        [int]$PublisherIndex
     )
+
+    $publisherMetricsCsv = Join-Path $resultsDir "publisher_$PublisherIndex-metrics.csv"
 
     @"
 [runtime]
@@ -91,6 +105,11 @@ ack_window_batches = $AckWindowBatches
 source_type = synthetic
 symbol_count = $SymbolsPerPublisher
 symbol_offset = $SymbolOffset
+
+[export]
+enable_publisher_metrics_csv = true
+publisher_metrics_csv_path = $publisherMetricsCsv
+metrics_interval_ms = 1000
 "@ | Set-Content -LiteralPath $Path -NoNewline
 }
 
@@ -116,7 +135,10 @@ try {
         $publisherConfig = Join-Path $resultsDir "publisher_$i.ini"
         $publisherOut = Join-Path $resultsDir "publisher_$i.out"
         $publisherErr = Join-Path $resultsDir "publisher_$i.err"
-        Write-PublisherConfig -Path $publisherConfig -SymbolOffset ($i * $SymbolsPerPublisher)
+        Write-PublisherConfig `
+            -Path $publisherConfig `
+            -SymbolOffset ($i * $SymbolsPerPublisher) `
+            -PublisherIndex $i
 
         Write-Host "Starting publisher $i..." -ForegroundColor Yellow
         $process = Start-Process `

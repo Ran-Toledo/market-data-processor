@@ -58,7 +58,7 @@ src/network     Multi-client TCP event receiver.
 src/pipeline    WorkerPool, queue implementations, event router.
 src/processing  Validation, sequence tracking, state, stats, rules.
 src/metrics     Latency and counter collection.
-src/output      Processed-event, alert, and state-change sinks.
+src/output      Processed-event, alert, state-change, and CSV sinks.
 ```
 
 The processor runtime is network-only. It accepts publisher connections, validates protocol messages, reads whole event batches, stamps a batch ingest timestamp, decodes frames, updates batch-level counters, and submits events into the worker pool.
@@ -80,6 +80,22 @@ Current responsibility:
 - Drain pending ACKs before shutdown.
 
 The publisher is a controllable traffic generator, not a second processing engine.
+
+## Persistence And Export
+
+CSV export is the first persistence/export layer.
+
+Processor exports:
+
+- `processor-metrics.csv`: interval-level received, submitted, rejected, processed, validation, queue depth, queue saturation, processing latency, and queue-wait latency metrics.
+- `symbol-stats.csv`: final per-symbol aggregate snapshot with counts, volume, price statistics, and the last observed state.
+- `processed-events.csv`: optional event history output with one row per processed event.
+
+Publisher exports:
+
+- `publisher-metrics.csv`: interval-level generated, encoded, ACK-accepted, and encode-failure metrics.
+
+The default run script writes exports under `results\run_<timestamp>\` and gives each publisher its own metrics CSV. Processed event history is disabled by default in high-throughput configs because it has direct disk I/O cost proportional to processed event count.
 
 ## Ingestion Model
 
@@ -174,5 +190,6 @@ Current default max event frames per batch is `2048`. The default event frame si
 
 - Heartbeat, reconnect, timeout, and `Reject` handling are incomplete.
 - Ingress metrics are still mostly aggregate counters.
+- CSV persistence is file-based; SQLite or another structured store is not implemented yet.
 - Socket buffer and TCP options are not configurable yet.
 - Automated loopback coverage currently exercises one publisher connection; multi-publisher CTest coverage is still pending.

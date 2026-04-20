@@ -30,6 +30,13 @@ namespace mdp::publisher::config
         std::size_t symbolOffset{ 0 };
     };
 
+    struct ExportConfig
+    {
+        bool enablePublisherMetricsCsv{ true };
+        std::filesystem::path publisherMetricsCsvPath{ "results/publisher-metrics.csv" };
+        std::uint32_t metricsIntervalMs{ 1000 };
+    };
+
     class PublisherConfig
     {
     public:
@@ -38,10 +45,12 @@ namespace mdp::publisher::config
         const RuntimeConfig& runtime() const { return m_runtime; }
         const NetworkConfig& network() const { return m_network; }
         const SourceConfig& source() const { return m_source; }
+        const ExportConfig& exportConfig() const { return m_export; }
 
     private:
         RuntimeConfig m_runtime;
         NetworkConfig m_network;
         SourceConfig m_source;
+        ExportConfig m_export;
     };
 }

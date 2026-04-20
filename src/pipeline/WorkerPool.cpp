@@ -159,12 +159,18 @@ namespace mdp::pipeline
         }
     }
 
-    WorkerPool::PartitionContext::PartitionContext()
-        : queue(createEventQueue())
+    WorkerPool::PartitionContext::PartitionContext(mdp::output::IEventSink* eventSink)
+        : queue(createEventQueue()),
+          processor(eventSink)
     {
     }
 
     WorkerPool::WorkerPool(std::size_t workerCount)
+        : WorkerPool(workerCount, nullptr)
+    {
+    }
+
+    WorkerPool::WorkerPool(std::size_t workerCount, mdp::output::IEventSink* eventSink)
     {
         if (workerCount == 0)
         {
@@ -175,7 +181,7 @@ namespace mdp::pipeline
 
         for (std::size_t i = 0; i < workerCount; ++i)
         {
-            m_partitions.push_back(std::make_unique<PartitionContext>());
+            m_partitions.push_back(std::make_unique<PartitionContext>(eventSink));
         }
     }
 

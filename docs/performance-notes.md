@@ -38,6 +38,9 @@ Current useful metrics:
 - queue wait latency percentiles
 - publisher generated/sec
 - publisher accepted count
+- processor interval metrics CSV
+- publisher interval metrics CSV
+- final symbol statistics CSV
 
 ## Metrics To Add
 
@@ -100,9 +103,9 @@ Avoid judging throughput from a single publisher if the target workload expects 
 
 1. Multi-executable loopback behavior is covered by CTest for one publisher connection; multi-publisher automated coverage is still pending.
 2. `Reject`, heartbeat, reconnect, and timeout handling are incomplete.
-3. Run output is text logs rather than structured benchmark CSVs.
-4. Socket buffer sizing and TCP options are not configurable yet.
-5. High-throughput defaults increase latency percentiles compared with smaller batches.
+3. Socket buffer sizing and TCP options are not configurable yet.
+4. High-throughput defaults increase latency percentiles compared with smaller batches.
+5. Per-event CSV history is intentionally disabled by default because it can dominate high-throughput benchmark cost.
 
 ## Next Work
 
@@ -116,7 +119,6 @@ Avoid judging throughput from a single publisher if the target workload expects 
 
 ### Performance
 
-- Add structured interval-level CSV output.
 - Add plots for receive throughput, decode failures, batch size, and queue wait.
 - Add socket send/receive buffer configuration.
 - Evaluate batch enqueue APIs in `WorkerPool` only after better ingress metrics are available.

@@ -34,6 +34,17 @@ Logs are written under:
 results\run_<timestamp>\
 ```
 
+Structured CSV exports are written beside the logs:
+
+```text
+processor-metrics.csv
+publisher_0-metrics.csv
+publisher_1-metrics.csv
+symbol-stats.csv
+```
+
+Processed event history can be enabled in `[export]` with `enable_processed_events_csv = true`; it is disabled in default performance runs to avoid making disk write throughput the benchmark bottleneck.
+
 ## Configurable Runs
 
 `run_pipeline.bat` forwards arguments to `tools/run_pipeline.ps1`:
@@ -76,6 +87,9 @@ Each run captures:
 - `processor.err`
 - `publisher_<n>.out`
 - `publisher_<n>.err`
+- `processor-metrics.csv`
+- `publisher_<n>-metrics.csv`
+- `symbol-stats.csv`
 - generated publisher configs for sharded runs
 
 The processor output includes:
@@ -101,8 +115,6 @@ The publisher output includes:
 
 ## Next Benchmark Work
 
-- Emit structured CSV interval samples directly from the processor.
-- Emit structured CSV send metrics from publishers.
 - Record bytes/sec, batches/sec, average batch size, and socket disconnects.
 - Split receive, decode, submit, queue wait, and processing latency.
 - Add configurable socket send/receive buffers and TCP options.

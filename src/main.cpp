@@ -1,13 +1,18 @@
 // main.cpp
 #include "config/AppConfig.h"
 #include "network/TcpEventReceiver.h"
+#include "output/CsvEventSink.h"
 #include "pipeline/WorkerPool.h"
 #include "processing/SymbolStats.h"
 
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <memory>
+#include <ostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -16,13 +21,115 @@ namespace
     struct ThroughputSample
     {
         std::uint64_t receivedCount{ 0 };
-        std::size_t rejectedCount{ 0 };
+        std::uint64_t rejectedCount{ 0 };
         std::uint64_t processedCount{ 0 };
     };
 
     struct ProcessorOptions
     {
         std::filesystem::path configPath;
+    };
+
+    void ensureParentDirectory(const std::filesystem::path& path)
+    {
+        const auto parent = path.parent_path();
+        if (!parent.empty())
+        {
+            std::filesystem::create_directories(parent);
+        }
+    }
+
+    void writeCsvString(std::ostream& output, const std::string& value)
+    {
+        output << '"';
+        for (const char c : value)
+        {
+            if (c == '"')
+            {
+                output << "\"\"";
+            }
+            else
+            {
+                output << c;
+            }
+        }
+        output << '"';
+    }
+
+    class ProcessorMetricsCsvWriter
+    {
+    public:
+        explicit ProcessorMetricsCsvWriter(const std::filesystem::path& path)
+        {
+            ensureParentDirectory(path);
+            m_output.open(path, std::ios::out | std::ios::trunc);
+
+            if (!m_output.is_open())
+            {
+                throw std::runtime_error(
+                    "Failed to open processor metrics CSV: " + path.string());
+            }
+
+            m_output
+                << "elapsedSec,intervalSec,receivedTotal,submittedTotal,rejectedTotal,"
+                << "processedTotal,validTotal,invalidTotal,duplicateTotal,"
+                << "outOfOrderTotal,sequenceGapTotal,receivedPerSec,processedPerSec,"
+                << "rejectedPerSec,totalQueueDepth,totalQueueCapacity,maxDepthSeen,"
+                << "nearCapacityQueues,saturatedQueues,latencyAvgNs,latencyP99Ns,"
+                << "queueWaitP99Ns\n";
+        }
+
+        void write(
+            double elapsedSeconds,
+            double intervalSeconds,
+            std::uint64_t receivedTotal,
+            std::uint64_t submittedTotal,
+            std::uint64_t rejectedTotal,
+            std::uint64_t processedTotal,
+            std::uint64_t validTotal,
+            std::uint64_t invalidTotal,
+            std::uint64_t duplicateTotal,
+            std::uint64_t outOfOrderTotal,
+            std::uint64_t sequenceGapTotal,
+            double receivedPerSec,
+            double processedPerSec,
+            double rejectedPerSec,
+            std::size_t totalQueueDepth,
+            std::size_t totalQueueCapacity,
+            std::size_t maxDepthSeen,
+            std::size_t nearCapacityQueues,
+            std::size_t saturatedQueues,
+            std::uint64_t latencyAvgNs,
+            std::uint64_t latencyP99Ns,
+            std::uint64_t queueWaitP99Ns)
+        {
+            m_output
+                << elapsedSeconds << ','
+                << intervalSeconds << ','
+                << receivedTotal << ','
+                << submittedTotal << ','
+                << rejectedTotal << ','
+                << processedTotal << ','
+                << validTotal << ','
+                << invalidTotal << ','
+                << duplicateTotal << ','
+                << outOfOrderTotal << ','
+                << sequenceGapTotal << ','
+                << receivedPerSec << ','
+                << processedPerSec << ','
+                << rejectedPerSec << ','
+                << totalQueueDepth << ','
+                << totalQueueCapacity << ','
+                << maxDepthSeen << ','
+                << nearCapacityQueues << ','
+                << saturatedQueues << ','
+                << latencyAvgNs << ','
+                << latencyP99Ns << ','
+                << queueWaitP99Ns << '\n';
+        }
+
+    private:
+        std::ofstream m_output;
     };
 
     std::filesystem::path getConfigPath()
@@ -120,6 +227,22 @@ namespace
         std::cout << "  print_symbol_stats_summary="
             << (config.reporting().printSymbolStatsSummary ? "true" : "false")
             << std::endl;
+        std::cout << "Export config:" << std::endl;
+        std::cout << "  enable_processed_events_csv="
+            << (config.exportConfig().enableProcessedEventsCsv ? "true" : "false")
+            << std::endl;
+        std::cout << "  processed_events_csv_path="
+            << config.exportConfig().processedEventsCsvPath << std::endl;
+        std::cout << "  enable_processor_metrics_csv="
+            << (config.exportConfig().enableProcessorMetricsCsv ? "true" : "false")
+            << std::endl;
+        std::cout << "  processor_metrics_csv_path="
+            << config.exportConfig().processorMetricsCsvPath << std::endl;
+        std::cout << "  enable_symbol_stats_csv="
+            << (config.exportConfig().enableSymbolStatsCsv ? "true" : "false")
+            << std::endl;
+        std::cout << "  symbol_stats_csv_path="
+            << config.exportConfig().symbolStatsCsvPath << std::endl;
     }
 
     double perSecond(std::uint64_t count, double elapsedSeconds)
@@ -148,18 +271,23 @@ namespace
         const mdp::network::TcpEventReceiver& receiver,
         const mdp::pipeline::WorkerPool& workerPool,
         ThroughputSample& previousSample,
+        const std::chrono::steady_clock::time_point& startTime,
         const std::chrono::steady_clock::time_point& previousTime,
-        const std::chrono::steady_clock::time_point& currentTime)
+        const std::chrono::steady_clock::time_point& currentTime,
+        ProcessorMetricsCsvWriter* metricsWriter)
     {
         const auto partitionMetrics = workerPool.getPartitionMetrics();
         const std::uint64_t receivedCount = receiver.getReceivedEventCount();
-        const std::size_t rejectedCount =
-            static_cast<std::size_t>(receiver.getRejectedEventCount());
+        const std::uint64_t submittedCount = receiver.getSubmittedEventCount();
+        const std::uint64_t rejectedCount = receiver.getRejectedEventCount();
         const std::uint64_t processedCount = workerPool.getProcessedCount();
 
         const double elapsedSeconds =
             std::chrono::duration_cast<std::chrono::duration<double>>(
                 currentTime - previousTime).count();
+        const double elapsedSinceStartSeconds =
+            std::chrono::duration_cast<std::chrono::duration<double>>(
+                currentTime - startTime).count();
 
         const std::uint64_t receivedDelta = receivedCount - previousSample.receivedCount;
         const std::uint64_t rejectedDelta = rejectedCount - previousSample.rejectedCount;
@@ -197,6 +325,33 @@ namespace
             << " saturatedQueues=" << saturatedQueues << '/' << partitionMetrics.size()
             << std::endl;
 
+        if (metricsWriter != nullptr)
+        {
+            metricsWriter->write(
+                elapsedSinceStartSeconds,
+                elapsedSeconds,
+                receivedCount,
+                submittedCount,
+                rejectedCount,
+                processedCount,
+                workerPool.getValidCount(),
+                workerPool.getInvalidCount(),
+                workerPool.getDuplicateCount(),
+                workerPool.getOutOfOrderCount(),
+                workerPool.getSequenceGapCount(),
+                perSecond(receivedDelta, elapsedSeconds),
+                perSecond(processedDelta, elapsedSeconds),
+                perSecond(rejectedDelta, elapsedSeconds),
+                totalDepth,
+                totalCapacity,
+                maxDepthSeen,
+                nearCapacityQueues,
+                saturatedQueues,
+                workerPool.getAverageLatencyNs(),
+                workerPool.getPercentileLatencyNs(99.0),
+                workerPool.getPercentileQueueWaitLatencyNs(99.0));
+        }
+
         previousSample.receivedCount = receivedCount;
         previousSample.rejectedCount = rejectedCount;
         previousSample.processedCount = processedCount;
@@ -204,7 +359,8 @@ namespace
 
     void runForConfiguredDuration(
         const mdp::network::TcpEventReceiver& receiver,
-        const mdp::pipeline::WorkerPool& workerPool)
+        const mdp::pipeline::WorkerPool& workerPool,
+        ProcessorMetricsCsvWriter* metricsWriter)
     {
         const auto startTime = std::chrono::steady_clock::now();
         const auto endTime =
@@ -233,8 +389,10 @@ namespace
                 receiver,
                 workerPool,
                 previousSample,
+                startTime,
                 previousSummaryTime,
-                summaryTime);
+                summaryTime,
+                metricsWriter);
             previousSummaryTime = summaryTime;
         }
     }
@@ -355,6 +513,66 @@ namespace
             std::cout << '\n';
         }
     }
+
+    void exportSymbolStatsCsv(const mdp::pipeline::WorkerPool& workerPool)
+    {
+        const auto& exportConfig = mdp::config::get().exportConfig();
+        if (!exportConfig.enableSymbolStatsCsv)
+        {
+            return;
+        }
+
+        ensureParentDirectory(exportConfig.symbolStatsCsvPath);
+        std::ofstream output(
+            exportConfig.symbolStatsCsvPath,
+            std::ios::out | std::ios::trunc);
+
+        if (!output.is_open())
+        {
+            throw std::runtime_error(
+                "Failed to open symbol stats CSV: " +
+                exportConfig.symbolStatsCsvPath.string());
+        }
+
+        const auto stateSnapshot = workerPool.getStateSnapshot();
+        const auto statsSnapshot = workerPool.getStatsSnapshot();
+
+        output
+            << "symbol,eventCount,totalVolume,minPrice,maxPrice,lastPrice,"
+            << "averagePrice,lastVolume,lastExchangeTimestampNs,lastIngestTimestampNs,"
+            << "lastSequenceNumber\n";
+
+        for (const auto& [symbol, stats] : statsSnapshot)
+        {
+            const auto stateIt = stateSnapshot.find(symbol);
+
+            writeCsvString(output, symbol);
+            output
+                << ','
+                << stats.eventCount << ','
+                << stats.totalVolume << ','
+                << stats.minPrice << ','
+                << stats.maxPrice << ','
+                << stats.lastPrice << ','
+                << stats.averagePrice << ',';
+
+            if (stateIt != stateSnapshot.end())
+            {
+                output
+                    << stateIt->second.lastVolume << ','
+                    << stateIt->second.lastExchangeTimestampNs << ','
+                    << stateIt->second.lastIngestTimestampNs << ','
+                    << stateIt->second.lastSequenceNumber << '\n';
+            }
+            else
+            {
+                output << "0,0,0,0\n";
+            }
+        }
+
+        std::cout << "Exported symbol stats CSV: "
+            << exportConfig.symbolStatsCsvPath << std::endl;
+    }
 }
 
 int main(int argc, char** argv)
@@ -363,7 +581,23 @@ int main(int argc, char** argv)
     mdp::config::loadFromFile(options.configPath);
     printStartupConfig(options.configPath);
 
-    mdp::pipeline::WorkerPool workerPool(mdp::config::get().runtime().numWorkers);
+    std::unique_ptr<mdp::output::CsvEventSink> csvEventSink;
+    if (mdp::config::get().exportConfig().enableProcessedEventsCsv)
+    {
+        csvEventSink = std::make_unique<mdp::output::CsvEventSink>(
+            mdp::config::get().exportConfig().processedEventsCsvPath);
+    }
+
+    std::unique_ptr<ProcessorMetricsCsvWriter> processorMetricsWriter;
+    if (mdp::config::get().exportConfig().enableProcessorMetricsCsv)
+    {
+        processorMetricsWriter = std::make_unique<ProcessorMetricsCsvWriter>(
+            mdp::config::get().exportConfig().processorMetricsCsvPath);
+    }
+
+    mdp::pipeline::WorkerPool workerPool(
+        mdp::config::get().runtime().numWorkers,
+        csvEventSink.get());
     mdp::network::TcpEventReceiverOptions receiverOptions;
     receiverOptions.listenAddress = mdp::config::get().network().listenAddress;
     receiverOptions.listenPort = mdp::config::get().network().listenPort;
@@ -381,7 +615,7 @@ int main(int argc, char** argv)
     std::cout << "Processor startup complete." << std::endl;
 
     const auto startTime = std::chrono::steady_clock::now();
-    runForConfiguredDuration(receiver, workerPool);
+    runForConfiguredDuration(receiver, workerPool, processorMetricsWriter.get());
 
     std::cout << "Processor runtime elapsed; shutdown requested." << std::endl;
     std::cout << "Stopping TCP receiver and worker pool..." << std::endl;
@@ -403,6 +637,7 @@ int main(int argc, char** argv)
     printProcessingSummary(receiver, workerPool, elapsedSeconds);
     printQueueSummary(workerPool);
     printSymbolSummary(workerPool);
+    exportSymbolStatsCsv(workerPool);
 
     return 0;
 }

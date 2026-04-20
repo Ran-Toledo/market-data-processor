@@ -28,6 +28,10 @@ $processorOut = Join-Path $testRoot "processor.out"
 $processorErr = Join-Path $testRoot "processor.err"
 $publisherOut = Join-Path $testRoot "publisher.out"
 $publisherErr = Join-Path $testRoot "publisher.err"
+$processorMetricsCsv = Join-Path $testRoot "processor-metrics.csv"
+$publisherMetricsCsv = Join-Path $testRoot "publisher-metrics.csv"
+$symbolStatsCsv = Join-Path $testRoot "symbol-stats.csv"
+$processedEventsCsv = Join-Path $testRoot "processed-events.csv"
 
 function Write-ProcessorConfig {
 @"
@@ -59,6 +63,14 @@ processing_stats_log_interval = 1000
 print_processing_stats_summary = true
 print_queue_metrics_summary = true
 print_symbol_stats_summary = false
+
+[export]
+enable_processed_events_csv = true
+processed_events_csv_path = $processedEventsCsv
+enable_processor_metrics_csv = true
+processor_metrics_csv_path = $processorMetricsCsv
+enable_symbol_stats_csv = true
+symbol_stats_csv_path = $symbolStatsCsv
 "@ | Set-Content -LiteralPath $processorConfig -NoNewline
 }
 
@@ -80,6 +92,11 @@ ack_window_batches = 2
 source_type = synthetic
 symbol_count = 32
 symbol_offset = 0
+
+[export]
+enable_publisher_metrics_csv = true
+publisher_metrics_csv_path = $publisherMetricsCsv
+metrics_interval_ms = 500
 "@ | Set-Content -LiteralPath $publisherConfig -NoNewline
 }
 
@@ -107,6 +124,22 @@ function Assert-Equal {
 
     if ($Actual -ne $Expected) {
         throw "$Name expected $Expected but got $Actual. Logs: $testRoot"
+    }
+}
+
+function Assert-CsvHasRows {
+    param(
+        [string]$Path,
+        [string]$Name
+    )
+
+    if (!(Test-Path $Path)) {
+        throw "Missing $Name CSV: $Path. Logs: $testRoot"
+    }
+
+    $rows = @(Import-Csv $Path)
+    if ($rows.Count -lt 1) {
+        throw "$Name CSV has no rows: $Path. Logs: $testRoot"
     }
 }
 
@@ -171,6 +204,11 @@ try {
     Assert-Equal (Match-RequiredValue $processorText "Rejected messages: (\d+)" "processor rejected messages") 0 "processor rejected messages"
     Assert-Equal (Match-RequiredValue $processorText "Processed count: (\d+)" "processor processed count") 5000 "processor processed count"
     Assert-Equal (Match-RequiredValue $processorText "Sequence gaps: (\d+)" "processor sequence gaps") 0 "processor sequence gaps"
+
+    Assert-CsvHasRows $processorMetricsCsv "processor metrics"
+    Assert-CsvHasRows $publisherMetricsCsv "publisher metrics"
+    Assert-CsvHasRows $symbolStatsCsv "symbol stats"
+    Assert-CsvHasRows $processedEventsCsv "processed events"
 
     Write-Host "Loopback integration test passed. Logs: $testRoot"
 }

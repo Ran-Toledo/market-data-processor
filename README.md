@@ -80,6 +80,16 @@ The script writes logs under:
 results\run_<timestamp>\
 ```
 
+It also writes structured CSV exports in that directory:
+
+```text
+processor-metrics.csv       interval-level processor throughput, queue, and latency metrics
+publisher_<n>-metrics.csv   interval-level publisher generation/encode/ACK metrics
+symbol-stats.csv            final per-symbol aggregate snapshot
+```
+
+Processed event history CSV is available through config, but remains disabled by default for high-throughput runs because it writes one row per processed event.
+
 The batch file forwards arguments to the PowerShell runner, so the run is configurable:
 
 ```powershell
@@ -122,6 +132,25 @@ symbols per publisher:   256
 
 Both executables print their loaded configuration, startup status, shutdown status, and final counters to stdout.
 
+Processor export settings live under `[export]`:
+
+```ini
+enable_processed_events_csv = false
+processed_events_csv_path = results/processed-events.csv
+enable_processor_metrics_csv = true
+processor_metrics_csv_path = results/processor-metrics.csv
+enable_symbol_stats_csv = true
+symbol_stats_csv_path = results/symbol-stats.csv
+```
+
+Publisher export settings live under `[export]`:
+
+```ini
+enable_publisher_metrics_csv = true
+publisher_metrics_csv_path = results/publisher-metrics.csv
+metrics_interval_ms = 1000
+```
+
 ## Performance
 
 The current best local loopback run processed nearly 2M events/sec:
@@ -158,12 +187,13 @@ See [docs/performance-load-tests.md](docs/performance-load-tests.md) and [docs/p
 - Configurable bounded queues.
 - Queue metrics and queue wait latency metrics.
 - Throughput and latency reporting.
+- CSV export for interval publisher metrics, interval processor metrics, processed event history, and final symbol statistics.
 - Unit and integration test coverage for core processing components.
 
 ## Next Improvements
 
 1. Add reconnect, heartbeat, timeout, and publisher-side `Reject` handling.
-2. Add structured CSV output for interval-level publisher and processor metrics.
-3. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
-4. Add socket send/receive buffer and TCP option configuration.
-5. Add multi-publisher integration coverage for sharded symbols.
+2. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
+3. Add socket send/receive buffer and TCP option configuration.
+4. Add multi-publisher integration coverage for sharded symbols.
+5. Evaluate SQLite or another structured persistence target after the CSV export shape stabilizes.

@@ -99,6 +99,7 @@ namespace mdp::processing
         publishStateChange(stateChange);
         m_metrics.onProcessed();
         result.processed = true;
+        publishProcessedEvent(event);
         return result;
     }
 
@@ -137,6 +138,14 @@ namespace mdp::processing
             ++i)
         {
             sink += static_cast<std::uint64_t>(i) * 1664525ULL + 1013904223ULL;
+        }
+    }
+
+    void EventProcessor::publishProcessedEvent(const MarketDataEvent& event) const
+    {
+        if (m_eventSink != nullptr)
+        {
+            m_eventSink->publishProcessedEvent(event);
         }
     }
 
