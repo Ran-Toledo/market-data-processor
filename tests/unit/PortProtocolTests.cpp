@@ -64,7 +64,7 @@ namespace
     {
         assert(mdp::protocol::kDefaultListenAddress == "127.0.0.1");
         assert(mdp::protocol::kDefaultListenPort == 19000);
-        assert(mdp::protocol::kDefaultMaxEventFramesPerBatch == 256);
+        assert(mdp::protocol::kDefaultMaxEventFramesPerBatch == 2048);
     }
 }
 

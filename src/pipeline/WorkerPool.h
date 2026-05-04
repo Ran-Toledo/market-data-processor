@@ -1,6 +1,7 @@
 #pragma once
 
 #include "api/domain/MarketDataEvent.h"
+#include "output/IEventSink.h"
 #include "pipeline/IEventRouter.h"
 #include "pipeline/IEventQueue.h"
 #include "processing/EventProcessor.h"
@@ -33,6 +34,7 @@ namespace mdp::pipeline
 
     public:
         explicit WorkerPool(std::size_t workerCount);
+        WorkerPool(std::size_t workerCount, mdp::output::IEventSink* eventSink);
 
         ~WorkerPool();
 
@@ -73,7 +75,7 @@ namespace mdp::pipeline
             processing::EventProcessor processor;
             std::atomic<std::uint64_t> acceptedCount{ 0 };
 
-            PartitionContext();
+            explicit PartitionContext(mdp::output::IEventSink* eventSink);
         };
 
     private:

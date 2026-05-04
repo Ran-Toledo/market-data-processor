@@ -12,35 +12,37 @@ namespace mdp::publisher
 {
     namespace
     {
-        struct SymbolProfile
+        std::vector<SyntheticPublisherSource::SymbolProfile> createSymbolProfiles(
+            std::size_t symbolCount,
+            std::size_t symbolOffset)
         {
-            std::string symbol;
-            double basePrice;
-            double maxDeviation;
-        };
+            symbolCount = std::max<std::size_t>(1, symbolCount);
 
-        std::vector<SymbolProfile> createSymbolProfiles()
-        {
-            std::vector<SymbolProfile> profiles;
-            profiles.reserve(32);
+            std::vector<SyntheticPublisherSource::SymbolProfile> profiles;
+            profiles.reserve(symbolCount);
 
-            profiles.push_back({ "AAPL", 185.0, 4.0 });
-            profiles.push_back({ "MSFT", 420.0, 6.0 });
-            profiles.push_back({ "GOOG", 155.0, 3.0 });
-            profiles.push_back({ "AMZN", 180.0, 5.0 });
-            profiles.push_back({ "NVDA", 900.0, 20.0 });
+            if (symbolOffset == 0)
+            {
+                profiles.push_back({ "AAPL", 185.0, 4.0 });
+                profiles.push_back({ "MSFT", 420.0, 6.0 });
+                profiles.push_back({ "GOOG", 155.0, 3.0 });
+                profiles.push_back({ "AMZN", 180.0, 5.0 });
+                profiles.push_back({ "NVDA", 900.0, 20.0 });
+            }
 
-            for (int i = 0; i < 27; ++i)
+            for (std::size_t i = profiles.size(); i < symbolCount; ++i)
             {
                 char buffer[16];
-                std::snprintf(buffer, sizeof(buffer), "SYM%02d", i);
+                const std::size_t symbolId = symbolOffset + i;
+                std::snprintf(buffer, sizeof(buffer), "SYM%012zu", symbolId);
 
-                const double basePrice = 50.0 + (i * 10.0);
-                const double deviation = 2.0 + (i % 5);
+                const double basePrice = 50.0 + ((symbolId % 200) * 5.0);
+                const double deviation = 2.0 + (symbolId % 5);
 
                 profiles.push_back({ buffer, basePrice, deviation });
             }
 
+            profiles.resize(symbolCount);
             return profiles;
         }
 
@@ -51,7 +53,9 @@ namespace mdp::publisher
                 std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
         }
 
-        double clampPrice(double price, const SymbolProfile& profile)
+        double clampPrice(
+            double price,
+            const SyntheticPublisherSource::SymbolProfile& profile)
         {
             const double minPrice = profile.basePrice - profile.maxDeviation;
             const double maxPrice = profile.basePrice + profile.maxDeviation;
@@ -60,7 +64,7 @@ namespace mdp::publisher
 
         double generateNextPrice(
             double currentPrice,
-            const SymbolProfile& profile,
+            const SyntheticPublisherSource::SymbolProfile& profile,
             std::mt19937& generator)
         {
             const double smallMoveStdDev = profile.maxDeviation * 0.08;
@@ -99,17 +103,28 @@ namespace mdp::publisher
                 return std::uniform_int_distribution<std::uint32_t>(2001, 10000)(generator);
             }
         }
-
-        const std::vector<SymbolProfile> kSymbolProfiles = createSymbolProfiles();
     }
 
     SyntheticPublisherSource::SyntheticPublisherSource()
-        : m_symbolStates(kSymbolProfiles.size())
+        : SyntheticPublisherSource(32)
+    {
+    }
+
+    SyntheticPublisherSource::SyntheticPublisherSource(std::size_t symbolCount)
+        : SyntheticPublisherSource(symbolCount, 0)
+    {
+    }
+
+    SyntheticPublisherSource::SyntheticPublisherSource(
+        std::size_t symbolCount,
+        std::size_t symbolOffset)
+        : m_symbolProfiles(createSymbolProfiles(symbolCount, symbolOffset))
+        , m_symbolStates(m_symbolProfiles.size())
     {
         std::seed_seq seed
         {
             static_cast<unsigned int>(std::random_device{}()),
-            static_cast<unsigned int>(kSymbolProfiles.size())
+            static_cast<unsigned int>(m_symbolProfiles.size())
         };
         m_generator.seed(seed);
     }
@@ -124,10 +139,10 @@ namespace mdp::publisher
     {
         std::uniform_int_distribution<std::size_t> symbolIndexDistribution(
             0,
-            kSymbolProfiles.size() - 1);
+            m_symbolProfiles.size() - 1);
 
         const std::size_t symbolIndex = symbolIndexDistribution(m_generator);
-        const SymbolProfile& profile = kSymbolProfiles[symbolIndex];
+        const SymbolProfile& profile = m_symbolProfiles[symbolIndex];
         SymbolRuntimeState& runtimeState = m_symbolStates[symbolIndex];
 
         if (runtimeState.lastPrice == 0.0)

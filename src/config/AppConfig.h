@@ -48,6 +48,7 @@ namespace mdp::config
         std::string listenAddress{ "127.0.0.1" };
         std::uint16_t listenPort{ 19000 };
         std::size_t maxBatchSize{ 256 };
+        std::size_t maxConnections{ 1 };
     };
 
     struct ReportingConfig
@@ -56,6 +57,16 @@ namespace mdp::config
         bool printProcessingStatsSummary{ true };
         bool printQueueMetricsSummary{ true };
         bool printSymbolStatsSummary{ true };
+    };
+
+    struct ExportConfig
+    {
+        bool enableProcessedEventsCsv{ false };
+        bool enableProcessorMetricsCsv{ true };
+        bool enableSymbolStatsCsv{ true };
+        std::filesystem::path processedEventsCsvPath{ "results/processed-events.csv" };
+        std::filesystem::path processorMetricsCsvPath{ "results/processor-metrics.csv" };
+        std::filesystem::path symbolStatsCsvPath{ "results/symbol-stats.csv" };
     };
 
     class AppConfig
@@ -68,6 +79,7 @@ namespace mdp::config
         const WorkerConfig& worker() const { return m_worker; }
         const NetworkConfig& network() const { return m_network; }
         const ReportingConfig& reporting() const { return m_reporting; }
+        const ExportConfig& exportConfig() const { return m_export; }
 
     private:
         LoggingConfig m_logging;
@@ -75,6 +87,7 @@ namespace mdp::config
         WorkerConfig m_worker;
         NetworkConfig m_network;
         ReportingConfig m_reporting;
+        ExportConfig m_export;
     };
 
     const AppConfig& get();

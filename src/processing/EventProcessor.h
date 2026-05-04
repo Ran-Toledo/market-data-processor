@@ -29,6 +29,7 @@ namespace mdp::processing
 
     private:
         void simulateProcessingLoad() const;
+        void publishProcessedEvent(const MarketDataEvent& event) const;
         void publishAlerts(const std::vector<RuleAlert>& alerts) const;
         void publishStateChange(const StateChange& stateChange) const;
 

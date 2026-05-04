@@ -231,6 +231,11 @@ namespace mdp::config
                 {
                     config.m_network.maxBatchSize = parseSize(value);
                 }
+                else if (key == "max_connections")
+                {
+                    config.m_network.maxConnections =
+                        std::max<std::size_t>(1, parseSize(value));
+                }
                 else
                 {
                     throw std::runtime_error(
@@ -260,6 +265,39 @@ namespace mdp::config
                 {
                     throw std::runtime_error(
                         "Unknown reporting key on line " + std::to_string(lineNumber) +
+                        ": " + key);
+                }
+            }
+            else if (currentSection == "export")
+            {
+                if (key == "enable_processed_events_csv")
+                {
+                    config.m_export.enableProcessedEventsCsv = parseBool(value);
+                }
+                else if (key == "enable_processor_metrics_csv")
+                {
+                    config.m_export.enableProcessorMetricsCsv = parseBool(value);
+                }
+                else if (key == "enable_symbol_stats_csv")
+                {
+                    config.m_export.enableSymbolStatsCsv = parseBool(value);
+                }
+                else if (key == "processed_events_csv_path")
+                {
+                    config.m_export.processedEventsCsvPath = value;
+                }
+                else if (key == "processor_metrics_csv_path")
+                {
+                    config.m_export.processorMetricsCsvPath = value;
+                }
+                else if (key == "symbol_stats_csv_path")
+                {
+                    config.m_export.symbolStatsCsvPath = value;
+                }
+                else
+                {
+                    throw std::runtime_error(
+                        "Unknown export key on line " + std::to_string(lineNumber) +
                         ": " + key);
                 }
             }

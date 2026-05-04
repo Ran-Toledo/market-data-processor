@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     market_data_processor
-    VERSION 0.1.0
+    VERSION 1.0.0
     DESCRIPTION "Low-latency market data processor in C++"
     LANGUAGES CXX
 )
@@ -70,7 +70,6 @@ add_executable(market_data_processor_tests
     tests/unit/SequenceTrackerTests.cpp
     tests/unit/SymbolStateStoreTests.cpp
     tests/unit/SymbolStatsTests.cpp
-    tests/integration/PipelineIntegrationTests.cpp
     ${MDP_LIBRARY_SOURCE_FILES}
     ${MDP_SRC_HEADER_FILES}
     ${MDP_INCLUDE_HEADER_FILES}
@@ -97,7 +96,16 @@ add_test(NAME unit.port_protocol COMMAND market_data_processor_tests unit.port_p
 add_test(NAME unit.risk_rule_evaluator COMMAND market_data_processor_tests unit.risk_rule_evaluator)
 add_test(NAME unit.symbol_stats COMMAND market_data_processor_tests unit.symbol_stats)
 add_test(NAME unit.symbol_state_store COMMAND market_data_processor_tests unit.symbol_state_store)
-add_test(NAME integration.pipeline COMMAND market_data_processor_tests integration.pipeline)
+add_test(
+    NAME integration.loopback
+    COMMAND powershell
+        -NoProfile
+        -ExecutionPolicy Bypass
+        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/LoopbackIntegrationTest.ps1"
+        -ProcessorExe "$<TARGET_FILE:market_data_processor>"
+        -PublisherExe "$<TARGET_FILE:market_data_publisher>"
+        -WorkDir "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 # Compiler warnings
 if(MSVC)

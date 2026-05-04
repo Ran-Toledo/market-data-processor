@@ -37,6 +37,25 @@ namespace mdp::publisher::config
                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return value;
         }
+
+        bool parseBool(const std::string& value)
+        {
+            const std::string normalized = toLower(trim(value));
+
+            if (normalized == "true" || normalized == "1" ||
+                normalized == "yes" || normalized == "on")
+            {
+                return true;
+            }
+
+            if (normalized == "false" || normalized == "0" ||
+                normalized == "no" || normalized == "off")
+            {
+                return false;
+            }
+
+            throw std::runtime_error("Invalid publisher boolean value: " + value);
+        }
     }
 
     PublisherConfig PublisherConfig::loadFromIni(const std::filesystem::path& filePath)
@@ -126,6 +145,13 @@ namespace mdp::publisher::config
                     config.m_network.connectRetryMs =
                         static_cast<std::uint32_t>(std::stoul(value));
                 }
+                else if (key == "ack_window_batches")
+                {
+                    config.m_network.ackWindowBatches =
+                        std::max<std::size_t>(
+                            1,
+                            static_cast<std::size_t>(std::stoull(value)));
+                }
                 else
                 {
                     throw std::runtime_error(
@@ -139,10 +165,42 @@ namespace mdp::publisher::config
                 {
                     config.m_source.sourceType = toLower(value);
                 }
+                else if (key == "symbol_count")
+                {
+                    config.m_source.symbolCount =
+                        static_cast<std::size_t>(std::stoull(value));
+                }
+                else if (key == "symbol_offset")
+                {
+                    config.m_source.symbolOffset =
+                        static_cast<std::size_t>(std::stoull(value));
+                }
                 else
                 {
                     throw std::runtime_error(
                         "Unknown publisher source key on line " +
+                        std::to_string(lineNumber) + ": " + key);
+                }
+            }
+            else if (currentSection == "export")
+            {
+                if (key == "enable_publisher_metrics_csv")
+                {
+                    config.m_export.enablePublisherMetricsCsv = parseBool(value);
+                }
+                else if (key == "publisher_metrics_csv_path")
+                {
+                    config.m_export.publisherMetricsCsvPath = value;
+                }
+                else if (key == "metrics_interval_ms")
+                {
+                    config.m_export.metricsIntervalMs =
+                        static_cast<std::uint32_t>(std::stoul(value));
+                }
+                else
+                {
+                    throw std::runtime_error(
+                        "Unknown publisher export key on line " +
                         std::to_string(lineNumber) + ": " + key);
                 }
             }

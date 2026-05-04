@@ -1,39 +1,61 @@
 # Performance Notes
 
-The project now uses networked experiments with `market_data_publisher` and processor-side TCP ingestion. The old in-process producer path has been removed from the processor runtime so benchmark work follows the same boundary as production ingestion.
+The current system is optimized around networked ingestion from external publisher processes. The old in-process synthetic producer and its config matrix have been removed so benchmarks exercise the same boundary as the processor runtime.
 
-## Metrics To Preserve
+## Current Findings
+
+Single-session ingestion improved with:
+
+- whole-batch receive in `TcpEventReceiver`
+- one ingest timestamp per batch
+- batch-level counter updates
+- ACK pipelining in the publisher
+
+Multi-session ingestion produced the largest gain:
+
+```text
+2 publishers + 4 processor workers -> about 1.97M processed events/sec
+```
+
+Four publishers did not improve the earlier matrix and increased latency, which suggests CPU scheduling, queue contention, or partition pressure becomes the next bottleneck after two publisher sessions.
+
+## Useful Metrics
 
 Current useful metrics:
 
-- Received/sec.
-- Accepted/submitted/sec.
-- Processed/sec.
-- Rejected/dropped events.
-- Queue current depth.
-- Queue max depth.
-- Near-capacity samples.
-- Processing latency percentiles.
-- Queue wait latency percentiles.
-- Sequence gaps, duplicates, out-of-order events.
+- accepted connections
+- received/sec
+- submitted/sec
+- processed/sec
+- rejected/dropped events
+- decode failures
+- rejected messages
+- sequence gaps, duplicates, out-of-order events
+- queue current depth
+- queue max depth
+- per-queue drop count
+- processing latency percentiles
+- queue wait latency percentiles
+- publisher generated/sec
+- publisher accepted count
+- processor interval metrics CSV
+- publisher interval metrics CSV
+- final symbol statistics CSV
 
-## Metrics To Add For Networked Ingestion
+## Metrics To Add
 
-- Socket accepted connections.
-- Socket disconnects/reconnects.
-- Bytes received/sec.
-- Frames received/sec.
-- Frames decoded/sec.
-- Decode failures by reason.
-- Batches received/sec.
-- Average and max batch size.
-- Receive-to-decode latency.
-- Decode-to-submit latency.
-- Receive-to-enqueue latency.
-- Publisher send failures.
-- Publisher reconnect count.
-- Publisher frames sent/sec.
-- Publisher bytes sent/sec.
+- bytes received/sec
+- bytes sent/sec
+- batches received/sec
+- batches sent/sec
+- average and max batch size
+- socket disconnects/reconnects
+- receive-to-decode latency
+- decode-to-submit latency
+- receive-to-enqueue latency
+- ACK latency
+- publisher send failures
+- publisher reconnect count
 
 The goal is to separate bottlenecks:
 
@@ -48,56 +70,61 @@ source generation
   -> processing
 ```
 
-## Benchmark Guidance
+## Current Best Defaults
 
-Use networked experiments to tune:
+```text
+publishers:              2
+processor workers:       4
+symbols per publisher:   256
+publisher batch size:    1024
+publisher ACK window:    4
+processor max batch:     2048
+queue capacity:          8192 per worker
+queue type:              blocking_bounded
+```
 
-- Publisher batch size.
-- Socket send/receive buffer sizes.
-- Processor receive loop strategy.
-- Decode batching.
-- Receive thread count.
-- Backpressure behavior between OS socket buffers and worker queues.
-- Worker count.
-- Queue capacity.
-- Queue implementation.
-- Queue full policy.
-- Per-symbol state/stats update cost.
+These defaults favor throughput over the lowest possible tail latency.
 
-## Current Risk Areas
+## Tuning Guidance
 
-1. The TCP path is manually smoke-tested but not covered by automated integration tests yet.
-2. Heartbeat, reconnect, and reject handling are incomplete.
-3. Networked benchmark output still needs structured interval CSVs.
-4. The build script recreates the build directory and can print Visual Studio file-lock warnings after successful builds.
+Tune in this order:
 
-## Suggested Improvements
+1. Publisher count and worker count.
+2. Publisher batch size and processor max batch size.
+3. ACK window size.
+4. Queue capacity.
+5. Queue implementation.
+6. Symbol count and symbol sharding.
+7. Socket send/receive buffer sizes once configurable.
 
-### Near Term
+Avoid judging throughput from a single publisher if the target workload expects multiple feed sessions. One receiver session has a different bottleneck profile than multiple sharded publisher sessions.
 
-- Add loopback integration tests for publisher batches received by processor.
-- Add heartbeat and reconnect behavior.
-- Add publisher handling for server `Reject` messages.
-- Add send/receive socket buffer configuration.
-- Add networked performance test scripts that launch both processes.
+## Current Risks
 
-### Performance
+1. Multi-executable loopback behavior is covered by CTest for one publisher connection; multi-publisher automated coverage is still pending.
+2. `Reject`, heartbeat, reconnect, and timeout handling are incomplete.
+3. Socket buffer sizing and TCP options are not configurable yet.
+4. High-throughput defaults increase latency percentiles compared with smaller batches.
+5. Per-event CSV history is intentionally disabled by default because it can dominate high-throughput benchmark cost.
 
-- Record interval-level ingress metrics alongside queue and latency samples.
-- Add plots for decode failures, batch size, receive throughput, and receive-to-enqueue latency.
-- Add baseline charts for the networked publisher/processor path.
-
-### Code Structure
-
-- Keep `mdp_protocol` small and stable.
-- Consider a separate `mdp_network` library only after socket code is shared by processor and publisher.
-- Keep publisher source adapters behind `IPublisherSource`.
+## Next Work
 
 ### Correctness
 
-- Validate partial TCP reads and writes.
-- Validate malformed `MessageHeader` values.
-- Validate mismatched batch payload sizes.
-- Reject event batches exceeding configured max batch size.
+- Add CTest integration for multiple sharded publishers.
+- Add malformed `MessageHeader` tests.
+- Add oversized batch rejection tests.
 - Add protocol version rejection tests.
-- Add reconnect/heartbeat timeout tests.
+- Add reconnect and heartbeat timeout tests.
+
+### Performance
+
+- Add plots for receive throughput, decode failures, batch size, and queue wait.
+- Add socket send/receive buffer configuration.
+- Evaluate batch enqueue APIs in `WorkerPool` only after better ingress metrics are available.
+
+### Operations
+
+- Keep startup config printing in both executables.
+- Keep run scripts writing per-process stdout/stderr logs under `results/`.
+- Preserve the `.bat` entrypoints for Windows users and keep PowerShell for process orchestration.

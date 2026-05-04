@@ -1,123 +1,201 @@
 # Market Data Processor
 
-A C++ market-data processing pipeline focused on low-latency ingestion, deterministic per-symbol routing, bounded queueing, event validation, per-symbol state/statistics, and performance benchmarking.
+A high-throughput C++ market data ingestion and processing system with TCP publishers, binary framing, deterministic per-symbol routing, bounded worker queues, validation, risk-rule evaluation, runtime metrics, and CSV export.
 
-The project separates the processor from the market-data publisher boundary:
+## Architecture Overview
 
-- `market_data_processor`: the processing application and TCP event receiver.
-- `market_data_publisher`: an external synthetic traffic-generator application under `publisher/`.
-- `mdp_protocol`: a shared static protocol library under `lib/protocol`.
-- `include/api`: public domain and wire-protocol headers used by both apps.
+The repository has three main runtime boundaries:
 
-The processor executable listens for TCP batches from the external publisher. Synthetic market-data generation lives in the publisher process, not inside the processor runtime.
+- `market_data_publisher`: generates synthetic market data and sends framed batches over TCP.
+- `market_data_processor`: accepts publisher connections, decodes batches, routes events to workers, validates and processes them, and exports metrics.
+- `mdp_protocol`: shared frame encoding/decoding and port protocol definitions used by both executables.
 
-## Repository Layout
+At runtime, publishers connect to the processor, negotiate batch constraints, send binary event batches, receive ACKs, and keep same-symbol events ordered by routing them to the same worker partition.
 
-```text
-include/api/
-  domain/        Shared market-data domain types.
-  protocol/      Shared wire-frame and port protocol API.
+See [docs/architecture.md](docs/architecture.md) for the full system walkthrough and diagram.
 
-lib/protocol/    Shared protocol implementation, built as mdp_protocol.
+## Technical Highlights
 
-src/             Processor application internals.
-  config/        Processor config parser.
-  network/       TCP event receiver.
-  pipeline/      WorkerPool, queues, event router.
-  processing/    Validation, sequence tracking, state, stats, rules.
-  metrics/       Latency and throughput counters.
-  output/        Event sink interfaces.
-
-publisher/       External publisher traffic generator.
-  config/        Publisher config.
-  src/           Publisher app, source interface, synthetic source, TCP client.
-
-tests/           Unit, integration, and performance test runner.
-tools/           Offline performance analysis tools.
-docs/            Architecture and performance notes.
-```
+- C++17 + CMake project structure.
+- Synthetic market data publisher.
+- External TCP publisher/processor split.
+- Shared protocol library under `lib/protocol`.
+- Binary framed market data batches.
+- ACK batching/windowing on the publisher side.
+- Multi-client ingestion on the processor side.
+- Deterministic per-symbol routing.
+- Per-worker bounded queues.
+- Worker-local symbol state and symbol statistics.
+- Sequence validation and gap detection.
+- Risk rule evaluation for price jumps and large volume.
+- Throughput, queue, and latency metrics.
+- CSV export for publisher metrics, processor metrics, processed event history, and symbol statistics.
+- Unit and loopback integration tests.
 
 ## Build
 
-On Windows with Visual Studio 2022:
+Primary environment: Windows with Visual Studio 2022 and CMake.
+
+Build everything and run the test suite:
 
 ```powershell
 .\build.bat
 ```
 
-The script configures CMake, builds Debug and Release targets, and runs the test suite.
-
-Build outputs:
+This produces:
 
 ```text
 build\Debug\market_data_processor.exe
 build\Release\market_data_processor.exe
 build\Debug\market_data_processor_tests.exe
+build\publisher\Debug\market_data_publisher.exe
 build\publisher\Release\market_data_publisher.exe
 ```
 
-## Run Processor And Publisher
+## Run / Demo
 
-Start the processor first:
-
-```powershell
-.\build\Release\market_data_processor.exe
-```
-
-Then start the publisher in another terminal:
+The quickest end-to-end demo is the bundled pipeline runner:
 
 ```powershell
-.\build\publisher\Release\market_data_publisher.exe
+.\run_pipeline.bat
 ```
 
-Default TCP endpoint:
+Default run shape:
 
 ```text
-127.0.0.1:19000
+2 publisher processes
+4 processor workers
+1024-event publisher batches
+ACK window of 4 batches
+256 symbols per publisher
+8192 events per worker queue
 ```
 
-Processor configuration:
+The run writes artifacts under:
 
 ```text
-market-data-processor.ini
+results\run_<timestamp>\
 ```
 
-Publisher configuration:
+Manual execution is also supported:
+
+```powershell
+.\build\Release\market_data_processor.exe --config .\market-data-processor.ini
+.\build\publisher\Release\market_data_publisher.exe --config .\publisher\config\publisher.ini
+```
+
+For multiple manual publishers, run more than one publisher process and give them disjoint `symbol_offset` ranges in their config files.
+
+## Example Output
+
+Example processor summary from a recent local loopback run:
 
 ```text
-publisher\config\publisher.ini
+Accepted connections: 2
+Received count: 9682744
+Submitted count: 9682744
+Rejected count: 0
+Processed count: 9682744
+Processed throughput: 1.93461e+06 events/sec
+P50 latency: 262144 ns
+P95 latency: 524288 ns
+P99 latency: 1048576 ns
+P99 queue wait: 262144 ns
 ```
 
-The publisher generates synthetic events, encodes them with `mdp_protocol`, sends `EventBatch` messages over TCP, and waits for processor `Ack` messages.
+CSV artifacts from the same run:
 
-## Networked Performance Smoke Test
+```text
+processor-metrics.csv
+publisher_0-metrics.csv
+publisher_1-metrics.csv
+symbol-stats.csv
+```
+
+Processed event history export exists but is disabled by default in the high-throughput config because writing one row per processed event changes the profile of the run.
+
+## Benchmark Summary
+
+Benchmarking in this repo is currently aimed at local comparative testing rather than publishing a fixed set of canonical numbers.
+
+Useful dimensions to compare:
+
+| Scenario | Publishers | Workers | Batch Size | Duration | Throughput | Drops | Rejects | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| Local baseline | TBD | TBD | TBD | TBD | Fill after benchmark | TBD | TBD | Single-publisher starting point |
+| Multi-worker local | TBD | TBD | TBD | TBD | Fill after benchmark | TBD | TBD | Compare scaling with worker count |
+| Multi-publisher local | TBD | TBD | TBD | TBD | Fill after benchmark | TBD | TBD | Compare scaling with more sessions |
+
+See [docs/benchmarks.md](docs/benchmarks.md), [docs/performance-load-tests.md](docs/performance-load-tests.md), and [docs/performance-notes.md](docs/performance-notes.md).
+
+## Project Structure
+
+```text
+include/api/
+  domain/        Shared market-data domain types.
+  protocol/      Shared wire-format and port protocol headers.
+
+lib/protocol/    Shared frame encode/decode implementation.
+
+src/
+  config/        Processor config parsing.
+  metrics/       Counters and latency recorders.
+  network/       TCP receiver and session handling.
+  output/        Console and CSV sinks.
+  pipeline/      Worker pool, event router, queue implementations.
+  processing/    Validation, sequence tracking, symbol state/stats, rules.
+
+publisher/
+  config/        Publisher config files.
+  src/           Publisher app, synthetic source, TCP client.
+
+tests/
+  unit/          Core component tests.
+  integration/   Loopback test that launches processor + publisher.
+
+tools/           Run scripts and benchmark helpers.
+docs/            Architecture, benchmarks, design notes, demo, release docs.
+results/         Local benchmark and demo artifacts.
+```
+
+## Tests
+
+The project includes:
+
+- Unit tests for sequence tracking, event processor behavior, event queue behavior, latency recording, metrics, protocol framing, rule evaluation, symbol state, and symbol statistics.
+- A loopback integration test that launches the real processor and publisher executables together and verifies counters plus CSV output generation.
+
+Build and run tests:
 
 ```powershell
 .\build.bat
-.\run_performance_tests.bat
 ```
 
-The performance script launches the processor and external publisher together, captures both outputs under `results/`, and reports the end-to-end TCP ingestion path. Use this path for throughput and latency tuning.
+Run the existing CTest suite without rebuilding:
 
-## Current Capabilities
+```powershell
+ctest --test-dir .\build -C Debug --output-on-failure
+```
 
-- TCP publisher-to-processor event batch transport.
-- Shared binary event frame API.
-- Shared port protocol structs for processor/publisher IPC.
-- Deterministic symbol-to-worker routing.
-- Worker-local symbol state and symbol stats.
-- Sequence validation for new, duplicate, out-of-order, and gap events.
-- Risk rule evaluation for price jumps and large volume.
-- Configurable bounded queues.
-- Queue metrics and queue wait latency metrics.
-- Throughput and latency reporting.
-- Unit and integration test coverage for core processing components.
-- Networked publisher/processor smoke testing.
+## Known Limitations
 
-## Suggested Next Improvements
+- Benchmarks are local loopback measurements, not cross-host or production-network measurements.
+- Heartbeat, reconnect, timeout, and fuller `Reject` handling are defined at the protocol level but not yet hardened into a production-grade session layer.
+- Persistence is CSV-first; there is no SQLite or external storage integration yet.
+- The market data model is synthetic and intentionally simplified.
+- The networking implementation is Windows/Winsock-centric today.
+- Multi-publisher automated integration coverage is still lighter than the manual benchmark surface.
+- Security, auth, deployment packaging, and operational hardening are outside the current scope.
 
-1. Add automated loopback integration tests for publisher-to-processor TCP batches.
-2. Add reconnect, heartbeat, and timeout behavior.
-3. Add publisher handling for server `Reject` messages.
-4. Add ingress metrics: bytes/sec, batches/sec, socket disconnects, receive-to-enqueue latency.
-5. Add networked benchmark CSV output for publisher and processor interval samples.
+## Future Improvements
+
+- Transport hardening: reconnect, heartbeat/timeout enforcement, richer `Reject` handling.
+- Ingress observability: bytes/sec, batches/sec, average batch size, socket-level counters.
+- Transport tuning: socket buffer sizing, TCP options, deeper receive/decode/submit breakdown.
+- Broader test coverage for malformed messages and multi-publisher scenarios.
+- Optional structured persistence beyond CSV once the export shape stabilizes.
+
+## Additional Docs
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/benchmarks.md](docs/benchmarks.md)

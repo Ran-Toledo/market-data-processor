@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -96,6 +97,7 @@ namespace mdp::publisher
     void TcpPublisherClient::connect()
     {
         close();
+        m_inFlightMessageSequences.clear();
 
         sockaddr_in address{};
         address.sin_family = AF_INET;
@@ -159,6 +161,7 @@ namespace mdp::publisher
         m_options.maxBatchSize = std::max<std::uint32_t>(
             1,
             std::min(m_options.maxBatchSize, serverHello.maxEventFramesPerBatch));
+        m_options.ackWindowBatches = std::max<std::size_t>(1, m_options.ackWindowBatches);
     }
 
     void TcpPublisherClient::close()
@@ -210,18 +213,53 @@ namespace mdp::publisher
             throw std::runtime_error("Failed to send event batch");
         }
 
+        m_inFlightMessageSequences.push_back(messageSequence);
+        if (m_inFlightMessageSequences.size() < m_options.ackWindowBatches)
+        {
+            return 0;
+        }
+
+        return receiveNextAck();
+    }
+
+    std::uint64_t TcpPublisherClient::flushAcks()
+    {
+        std::uint64_t acceptedCount = 0;
+        while (!m_inFlightMessageSequences.empty())
+        {
+            acceptedCount += receiveNextAck();
+        }
+
+        return acceptedCount;
+    }
+
+    std::uint64_t TcpPublisherClient::receiveNextAck()
+    {
+        if (m_socket == 0)
+        {
+            throw std::runtime_error("Publisher socket is not connected");
+        }
+
+        if (m_inFlightMessageSequences.empty())
+        {
+            return 0;
+        }
+
+        const std::uint64_t expectedMessageSequence = m_inFlightMessageSequences.front();
         protocol::MessageHeader ackHeader;
         protocol::AckPayload ack;
+        const SOCKET socketHandle = static_cast<SOCKET>(m_socket);
         if (!receiveExact(socketHandle, &ackHeader, sizeof(ackHeader)) ||
             !protocol::isValidMessageHeader(ackHeader) ||
             ackHeader.type != protocol::MessageType::Ack ||
             ackHeader.payloadSize != sizeof(ack) ||
             !receiveExact(socketHandle, &ack, sizeof(ack)) ||
-            ack.acknowledgedMessageSequence != messageSequence)
+            ack.acknowledgedMessageSequence != expectedMessageSequence)
         {
             throw std::runtime_error("Failed to receive event batch ack");
         }
 
+        m_inFlightMessageSequences.pop_front();
         return ack.acceptedEventCount;
     }
 }
