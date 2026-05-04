@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     market_data_publisher
-    VERSION 0.1.0
+    VERSION 1.0.0
     DESCRIPTION "Example market data publisher traffic generator"
     LANGUAGES CXX
 )

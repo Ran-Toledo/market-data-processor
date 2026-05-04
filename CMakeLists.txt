@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     market_data_processor
-    VERSION 0.1.0
+    VERSION 1.0.0
     DESCRIPTION "Low-latency market data processor in C++"
     LANGUAGES CXX
 )

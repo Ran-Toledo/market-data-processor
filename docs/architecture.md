@@ -1,195 +1,231 @@
 # Architecture
 
-The system is organized around an external publisher application, a processor application, and a shared protocol library.
+This project is organized around three clear boundaries:
 
-```text
-market_data_publisher
-  -> IPublisherSource
-  -> MarketDataEvent
-  -> mdp_protocol encoder
-  -> TcpPublisherClient
-  -> TCP connection
+- `market_data_publisher`: generates synthetic market data and sends framed batches over TCP.
+- `market_data_processor`: receives batches, decodes them, routes events to worker queues, processes them, and exports runtime metrics.
+- `mdp_protocol`: shared framing and protocol definitions used by both sides.
 
-market_data_processor
-  -> TcpEventReceiver
-  -> IEventRouter
-  -> WorkerPool
-  -> EventProcessor
-  -> state/stats/rules/metrics
+## High-Level Diagram
+
+```mermaid
+flowchart LR
+    P1[Synthetic Publisher 1] -->|TCP framed batches| R[TcpEventReceiver]
+    P2[Synthetic Publisher 2] -->|TCP framed batches| R
+    R --> D[WorkerPool submit / event router]
+    D --> Q0[Worker Queue 0]
+    D --> Q1[Worker Queue 1]
+    D --> QN[Worker Queue N]
+    Q0 --> W0[EventProcessor 0]
+    Q1 --> W1[EventProcessor 1]
+    QN --> WN[EventProcessor N]
+    W0 --> S0[Worker-local state and stats]
+    W1 --> S1[Worker-local state and stats]
+    WN --> SN[Worker-local state and stats]
+    W0 --> M[Metrics and CSV export]
+    W1 --> M
+    WN --> M
 ```
 
-## Boundaries
-
-### Public API
-
-Public domain and protocol headers live under `include/api`.
-
-```text
-include/api/domain/
-  Types.h
-  MarketDataEvent.h
-
-include/api/protocol/
-  MarketDataEventFrame.h
-  PortProtocol.h
-```
-
-`MarketDataEvent` is the in-memory domain event. `MarketDataEventFrame` is the fixed-size wire representation. Keeping them separate prevents internal processor fields from becoming accidental wire-protocol commitments.
-
-### Protocol Library
-
-`lib/protocol` builds the shared `mdp_protocol` static library.
-
-Current responsibility:
-
-- Encode `MarketDataEvent` into `MarketDataEventFrame`.
-- Decode `MarketDataEventFrame` into `MarketDataEvent`.
-- Define shared port protocol structs and constants.
-
-Both applications link this library. Protocol encoding and decoding should stay centralized here.
-
-### Processor
-
-Processor internals live under `src`.
-
-```text
-src/config      Processor INI parser.
-src/network     Multi-client TCP event receiver.
-src/pipeline    WorkerPool, queue implementations, event router.
-src/processing  Validation, sequence tracking, state, stats, rules.
-src/metrics     Latency and counter collection.
-src/output      Processed-event, alert, state-change, and CSV sinks.
-```
-
-The processor runtime is network-only. It accepts publisher connections, validates protocol messages, reads whole event batches, stamps a batch ingest timestamp, decodes frames, updates batch-level counters, and submits events into the worker pool.
+## Component Breakdown
 
 ### Publisher
 
-Publisher code lives under `publisher`.
+The publisher executable lives under `publisher/`.
 
-Current responsibility:
+Responsibilities:
 
-- Load `publisher/config/publisher.ini`.
-- Generate synthetic market data.
-- Support configurable symbol count and symbol offset for sharded publishers.
-- Encode generated events using `mdp_protocol`.
-- Connect to the processor.
-- Send `ClientHello`.
-- Send `EventBatch` messages.
-- Pipeline ACK waits with configurable `ack_window_batches`.
-- Drain pending ACKs before shutdown.
+- load `publisher/config/publisher.ini`
+- generate synthetic events via `SyntheticPublisherSource`
+- encode events into `MarketDataEventFrame`
+- connect to the processor over TCP
+- send `ClientHello`
+- send `EventBatch` messages
+- pipeline ACK waits via `ack_window_batches`
+- flush outstanding ACKs before shutdown
+- emit interval CSV metrics when enabled
 
-The publisher is a controllable traffic generator, not a second processing engine.
+The publisher is intentionally simple: it is a controllable traffic generator, not a second processing pipeline.
 
-## Persistence And Export
+### Shared Protocol Library
 
-CSV export is the first persistence/export layer.
+The shared protocol library lives under `lib/protocol/`.
 
-Processor exports:
+Responsibilities:
 
-- `processor-metrics.csv`: interval-level received, submitted, rejected, processed, validation, queue depth, queue saturation, processing latency, and queue-wait latency metrics.
-- `symbol-stats.csv`: final per-symbol aggregate snapshot with counts, volume, price statistics, and the last observed state.
-- `processed-events.csv`: optional event history output with one row per processed event.
+- define the wire-level event frame
+- encode `MarketDataEvent` into `MarketDataEventFrame`
+- decode `MarketDataEventFrame` back into `MarketDataEvent`
+- define shared port-protocol structures such as `MessageHeader`, `ClientHello`, `ServerHello`, `EventBatch`, `Ack`, and `Reject`
 
-Publisher exports:
+This keeps protocol ownership in one place instead of duplicating serialization logic between publisher and processor.
 
-- `publisher-metrics.csv`: interval-level generated, encoded, ACK-accepted, and encode-failure metrics.
+### TCP Event Receiver
 
-The default run script writes exports under `results\run_<timestamp>\` and gives each publisher its own metrics CSV. Processed event history is disabled by default in high-throughput configs because it has direct disk I/O cost proportional to processed event count.
+The processor-side receiver lives under `src/network/`.
 
-## Ingestion Model
+Responsibilities:
 
-The receiver uses one accept thread plus one session thread per connected publisher, up to `network.max_connections`.
+- listen for publisher connections
+- enforce `max_connections`
+- perform the hello/handshake exchange
+- receive framed messages
+- validate message headers and batch payload sizing
+- decode event frames
+- stamp batch ingest time
+- submit decoded events into the worker pool
+- send ACKs with accepted event counts
+
+The receiver is intentionally aggregate-oriented: it reads a whole batch, decodes frames, and then feeds the worker pool event by event.
+
+### WorkerPool and Queues
+
+The worker pool lives under `src/pipeline/`.
+
+Responsibilities:
+
+- choose a worker partition for each event
+- enqueue events into bounded per-worker queues
+- run worker threads
+- expose queue metrics, processed counts, latency summaries, and snapshot accessors
+
+Each partition owns:
+
+- one queue
+- one `EventProcessor`
+- one accepted-count counter
+
+### EventProcessor
+
+The hot-path processing logic lives under `src/processing/`.
+
+Responsibilities:
+
+- validate event fields
+- enforce per-symbol sequence policy
+- identify duplicates, gaps, and out-of-order events
+- evaluate simple risk rules
+- update worker-local symbol state
+- update worker-local symbol statistics
+- record processing latency and queue-wait latency
+- optionally publish processed-event CSV rows
+
+## Runtime Data Flow
+
+The runtime flow is:
+
+1. the processor starts listening on `network.listen_address:network.listen_port`
+2. one or more publishers connect
+3. each publisher sends `ClientHello`
+4. the processor replies with `ServerHello`
+5. the publisher sends framed `EventBatch` messages
+6. the receiver validates the header and payload
+7. each frame is decoded into `MarketDataEvent`
+8. the event is stamped with batch ingest time
+9. `WorkerPool::submit` hashes the symbol to a worker partition
+10. the event enters that worker's bounded queue
+11. the worker thread pops the event and runs `EventProcessor::process`
+12. metrics and optional CSV exports are updated
+13. the processor ACKs the batch back to the publisher
+
+## Threading and Concurrency Model
+
+The current concurrency model is straightforward and explainable:
+
+- one accept/listen thread in `TcpEventReceiver`
+- one session thread per connected publisher
+- one worker thread per worker partition
+
+That means concurrency exists at two levels:
+
+- network/session concurrency across publishers
+- event-processing concurrency across worker partitions
+
+Same-symbol ordering is preserved because all events for a given symbol hash to the same worker queue.
+
+## Queueing and Backpressure Model
+
+Each worker has its own bounded queue.
+
+Important properties:
+
+- queue capacity is explicit and configurable
+- queue policy is configurable (`blocking_bounded` or `lock_free_ring`)
+- when the queue is full, behavior is governed by the configured full-policy
+- the processor keeps counters for accepted, rejected, dropped, and failed-enqueue events
+
+This makes overload visible instead of silently letting memory growth absorb pressure.
+
+The publisher also uses ACK windowing. It can have multiple in-flight batches before waiting for ACKs, which improves throughput without making the wire protocol complex.
+
+## Symbol Routing Model
+
+Routing is deterministic:
 
 ```text
-publisher 0 -> TCP session thread 0
-publisher 1 -> TCP session thread 1
-publisher N -> TCP session thread N
-
-session threads
-  -> whole-batch receive
-  -> frame decode
-  -> batch ingest timestamp
-  -> WorkerPool::submit
+hash(symbol) % worker_count
 ```
 
-This mirrors common feed/session-level scaling in real market-data systems. Publishers can be sharded by symbol range:
+This model was chosen for clarity and correctness:
 
-```text
-publisher 0: symbol_offset=0,   symbol_count=256
-publisher 1: symbol_offset=256, symbol_count=256
-```
+- same-symbol events always hit the same worker
+- state ownership stays local
+- ordering is preserved per symbol
+- there is no central lock around symbol state
 
-## Processing Model
+The tradeoff is possible skew if symbol activity is uneven.
 
-Symbols are deterministically routed to worker partitions. Each worker owns local state, statistics, sequence tracking, risk evaluation, processing latency recording, and queue wait latency recording for the symbols routed to that worker.
+## State Ownership Model
 
-```text
-WorkerPool::submit
-  -> hash(symbol) % worker_count
-  -> per-worker queue
-  -> EventProcessor
-  -> validation
-  -> sequence tracking
-  -> risk rules
-  -> state update
-  -> symbol stats update
-  -> latency metrics
-```
+Each `EventProcessor` owns its own:
 
-This keeps same-symbol processing ordered while allowing cross-symbol parallelism.
+- `SequenceTracker`
+- `SymbolStateStore`
+- `SymbolStats`
+- latency recorders
+- processing counters
 
-## Port Protocol
+This worker-local ownership keeps updates simple. The processor does not need a shared concurrent map for hot-path symbol state. End-of-run summaries and CSV snapshots are assembled by merging worker-local snapshots.
 
-The shared port protocol is defined in `include/api/protocol/PortProtocol.h`.
+## Metrics and Export Flow
 
-Default endpoint:
+The metrics path has two layers.
 
-```text
-address: 127.0.0.1
-port:    19000
-```
+### Live runtime metrics
 
-Message envelope:
+The processor prints periodic summaries that include:
 
-```text
-MessageHeader
-payload bytes
-```
+- received/sec
+- processed/sec
+- rejected/sec
+- queue depth
+- queue saturation signals
 
-Message types:
+The publisher prints generated, encoded, and accepted counts plus encode throughput.
 
-- `ClientHello`
-- `ServerHello`
-- `EventBatch`
-- `Heartbeat`
-- `Ack`
-- `Reject`
+### CSV export
 
-Event batch layout:
+When enabled, the processor writes:
 
-```text
-MessageHeader(type = EventBatch)
-EventBatchPayloadHeader
-MarketDataEventFrame[eventFrameCount]
-```
+- `processor-metrics.csv`: interval-level throughput, queue, validation, and latency metrics
+- `symbol-stats.csv`: end-of-run aggregated symbol statistics and last observed state
+- `processed-events.csv`: optional event history output
 
-Current default max event frames per batch is `2048`. The default event frame size is `56` bytes.
+When enabled, the publisher writes:
 
-## Design Rules
+- `publisher-metrics.csv`: interval-level generated, encoded, accepted, and encode-failure metrics
 
-- Keep wire protocol structs shared and versioned.
-- Keep processor-only logic out of the publisher.
-- Keep publisher source adapters behind `IPublisherSource`.
-- Do not duplicate frame encoding/decoding.
-- Keep same-symbol state single-writer through deterministic routing.
-- Prefer explicit boundaries: source, protocol, transport, router, queue, processor.
-- Use bounded queues and explicit counters for overload visibility.
+The run scripts place these files under `results\run_<timestamp>\`.
 
-## Known Gaps
+## Design Summary
 
-- Heartbeat, reconnect, timeout, and `Reject` handling are incomplete.
-- Ingress metrics are still mostly aggregate counters.
-- CSV persistence is file-based; SQLite or another structured store is not implemented yet.
-- Socket buffer and TCP options are not configurable yet.
-- Automated loopback coverage currently exercises one publisher connection; multi-publisher CTest coverage is still pending.
+The architecture is intentionally conservative:
+
+- explicit network boundary
+- shared protocol library
+- deterministic routing
+- bounded queues
+- worker-local state
+- observable runtime counters and artifacts
+
+That makes the project easier to explain, benchmark, and evolve than a more abstract or over-generalized design.
