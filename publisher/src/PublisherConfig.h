@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace mdp::publisher::config
 {
@@ -30,6 +32,24 @@ namespace mdp::publisher::config
         std::size_t symbolOffset{ 0 };
     };
 
+    struct IbkrConfig
+    {
+        std::string transport{ "snapshot" };
+        std::string baseUrl{ "https://localhost:5000/v1/api" };
+        std::string websocketUrl;
+        std::vector<std::string> symbols;
+        std::string securityType{ "STK" };
+        std::vector<std::string> conids;
+        std::unordered_map<std::string, std::string> symbolsByConid;
+        std::vector<std::string> fields{ "31", "84", "86", "85", "88", "_updated" };
+        std::uint32_t pollIntervalMs{ 1000 };
+        std::uint32_t websocketPingIntervalMs{ 60000 };
+        std::size_t eventQueueCapacity{ 65536 };
+        bool checkAuthOnStartup{ true };
+        bool callAccountsOnStartup{ true };
+        bool allowInsecureLocalhostTls{ true };
+    };
+
     struct ExportConfig
     {
         bool enablePublisherMetricsCsv{ true };
@@ -45,12 +65,14 @@ namespace mdp::publisher::config
         const RuntimeConfig& runtime() const { return m_runtime; }
         const NetworkConfig& network() const { return m_network; }
         const SourceConfig& source() const { return m_source; }
+        const IbkrConfig& ibkr() const { return m_ibkr; }
         const ExportConfig& exportConfig() const { return m_export; }
 
     private:
         RuntimeConfig m_runtime;
         NetworkConfig m_network;
         SourceConfig m_source;
+        IbkrConfig m_ibkr;
         ExportConfig m_export;
     };
 }

@@ -36,7 +36,10 @@ The publisher executable lives under `publisher/`.
 Responsibilities:
 
 - load `publisher/config/publisher.ini`
-- generate synthetic events via `SyntheticPublisherSource`
+- generate events from a pluggable source interface
+- support `synthetic/SyntheticPublisherSource` for local benchmarks
+- support `ibkr/IbkrMarketDataSource` for IBKR snapshot polling or websocket streaming
+- resolve configured IBKR symbols to conids through `/iserver/secdef/search` before subscribing or polling
 - encode events into `MarketDataEventFrame`
 - connect to the processor over TCP
 - send `ClientHello`
@@ -45,7 +48,7 @@ Responsibilities:
 - flush outstanding ACKs before shutdown
 - emit interval CSV metrics when enabled
 
-The publisher is intentionally simple: it is a controllable traffic generator, not a second processing pipeline.
+The publisher is intentionally simple: source-specific logic stays behind `IPublisherSource`, while batching, framing, ACK handling, and TCP transmission remain shared.
 
 ### Shared Protocol Library
 

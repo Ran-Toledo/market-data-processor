@@ -44,7 +44,7 @@ target_include_directories(market_data_publisher
 
 target_link_libraries(market_data_publisher PRIVATE mdp_protocol)
 if(WIN32)
-    target_link_libraries(market_data_publisher PRIVATE Ws2_32)
+    target_link_libraries(market_data_publisher PRIVATE Ws2_32 Winhttp)
 endif()
 
 if(MSVC)

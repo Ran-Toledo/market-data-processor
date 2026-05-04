@@ -18,6 +18,7 @@ See [docs/architecture.md](docs/architecture.md) for the full system walkthrough
 
 - C++17 + CMake project structure.
 - Synthetic market data publisher.
+- IBKR Client Portal source as a pluggable publisher source.
 - External TCP publisher/processor split.
 - Shared protocol library under `lib/protocol`.
 - Binary framed market data batches.
@@ -86,6 +87,64 @@ Manual execution is also supported:
 
 For multiple manual publishers, run more than one publisher process and give them disjoint `symbol_offset` ranges in their config files.
 
+## IBKR Source
+
+The publisher supports `source_type = ibkr` as an alternative to the synthetic source.
+
+What it does:
+
+- supports both snapshot polling and websocket streaming from the IBKR Client Portal Gateway
+- resolves configured symbols to conids on startup through `/iserver/secdef/search`
+- normalizes IBKR quote updates into `MarketDataEvent`
+- reuses the existing publisher batching, binary framing, and TCP send path
+
+What it does not do:
+
+- it does not implement IBKR login or browser auth flow
+- it is not a raw exchange trade feed
+- it is not intended for throughput benchmarking
+
+Use the synthetic source for throughput and load testing. Use the IBKR source for a real API-integration demo.
+
+Requirements:
+
+1. launch the IBKR Client Portal Gateway locally
+2. authenticate externally before starting the publisher
+3. point the publisher config at `https://localhost:5000/v1/api`
+
+Relevant publisher config sections:
+
+```ini
+[source]
+source_type = ibkr
+
+[ibkr]
+transport = websocket
+base_url = https://localhost:5000/v1/api
+websocket_url = wss://localhost:5000/v1/api/ws
+symbols = AAPL,MSFT,IBM
+security_type = STK
+fields = 31,84,86,85,88,_updated
+poll_interval_ms = 1000
+websocket_ping_interval_ms = 60000
+event_queue_capacity = 65536
+check_auth_on_startup = true
+call_accounts_on_startup = true
+allow_insecure_localhost_tls = true
+```
+
+Example demo flow:
+
+1. start the IBKR Client Portal Gateway
+2. authenticate in the browser
+3. start the processor
+4. start the publisher with `source_type = ibkr`
+5. observe the processor receiving quote-derived events
+
+The publisher checks `/iserver/auth/status` on startup, optionally calls `/iserver/accounts`, resolves symbols through `/iserver/secdef/search`, and fails clearly if the gateway session is not authenticated or no symbols resolve.
+
+For low-latency or higher-conid-count integration, prefer `transport = websocket`. Keep `transport = snapshot` for simpler polling demos.
+
 ## Example Output
 
 Example processor summary from a recent local loopback run:
@@ -147,7 +206,7 @@ src/
 
 publisher/
   config/        Publisher config files.
-  src/           Publisher app, synthetic source, TCP client.
+  src/           Publisher app, source adapters, and TCP client.
 
 tests/
   unit/          Core component tests.
@@ -194,6 +253,7 @@ ctest --test-dir .\build -C Debug --output-on-failure
 - Transport tuning: socket buffer sizing, TCP options, deeper receive/decode/submit breakdown.
 - Broader test coverage for malformed messages and multi-publisher scenarios.
 - Optional structured persistence beyond CSV once the export shape stabilizes.
+- IBKR-specific improvements such as richer quote field mapping and stronger session-expiry handling.
 
 ## Additional Docs
 

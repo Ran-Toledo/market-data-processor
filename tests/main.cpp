@@ -7,6 +7,7 @@ void runEventQueueTests();
 void runLatencyRecorderTests();
 void runMarketDataEventFrameTests();
 void runMetricsCollectorTests();
+void runIbkrMarketDataSourceTests();
 void runPortProtocolTests();
 void runRiskRuleEvaluatorTests();
 void runSymbolStatsTests();
@@ -49,6 +50,12 @@ namespace
         if (suiteName == "unit.metrics_collector")
         {
             runMetricsCollectorTests();
+            return true;
+        }
+
+        if (suiteName == "unit.ibkr_market_data_source")
+        {
+            runIbkrMarketDataSourceTests();
             return true;
         }
 
@@ -102,6 +109,7 @@ int main(int argc, char** argv)
         "unit.latency_recorder",
         "unit.market_data_event_frame",
         "unit.metrics_collector",
+        "unit.ibkr_market_data_source",
         "unit.port_protocol",
         "unit.risk_rule_evaluator",
         "unit.symbol_stats",

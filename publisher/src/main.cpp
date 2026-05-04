@@ -1,5 +1,5 @@
-#include "SyntheticPublisherSource.h"
 #include "PublisherConfig.h"
+#include "PublisherSourceFactory.h"
 #include "TcpPublisherClient.h"
 
 #include "api/protocol/MarketDataEventFrame.h"
@@ -151,6 +151,28 @@ namespace
         std::cout << "  source_type=" << config.source().sourceType << '\n';
         std::cout << "  symbol_count=" << config.source().symbolCount << '\n';
         std::cout << "  symbol_offset=" << config.source().symbolOffset << '\n';
+        if (config.source().sourceType == "ibkr")
+        {
+            std::cout << "IBKR config:" << '\n';
+            std::cout << "  transport=" << config.ibkr().transport << '\n';
+            std::cout << "  base_url=" << config.ibkr().baseUrl << '\n';
+            std::cout << "  websocket_url=" << config.ibkr().websocketUrl << '\n';
+            std::cout << "  symbols_count=" << config.ibkr().symbols.size() << '\n';
+            std::cout << "  conids_count=" << config.ibkr().conids.size() << '\n';
+            std::cout << "  security_type=" << config.ibkr().securityType << '\n';
+            std::cout << "  fields_count=" << config.ibkr().fields.size() << '\n';
+            std::cout << "  poll_interval_ms=" << config.ibkr().pollIntervalMs << '\n';
+            std::cout << "  websocket_ping_interval_ms="
+                << config.ibkr().websocketPingIntervalMs << '\n';
+            std::cout << "  event_queue_capacity="
+                << config.ibkr().eventQueueCapacity << '\n';
+            std::cout << "  check_auth_on_startup="
+                << (config.ibkr().checkAuthOnStartup ? "true" : "false") << '\n';
+            std::cout << "  call_accounts_on_startup="
+                << (config.ibkr().callAccountsOnStartup ? "true" : "false") << '\n';
+            std::cout << "  allow_insecure_localhost_tls="
+                << (config.ibkr().allowInsecureLocalhostTls ? "true" : "false") << '\n';
+        }
         std::cout << "Export config:" << '\n';
         std::cout << "  enable_publisher_metrics_csv="
             << (config.exportConfig().enablePublisherMetricsCsv ? "true" : "false")
@@ -176,16 +198,8 @@ int main(int argc, char** argv)
             config.exportConfig().publisherMetricsCsvPath);
     }
 
-    if (config.source().sourceType != "synthetic")
-    {
-        std::cerr << "Unsupported publisher source type: "
-            << config.source().sourceType << '\n';
-        return 1;
-    }
-
-    mdp::publisher::SyntheticPublisherSource source(
-        config.source().symbolCount,
-        config.source().symbolOffset);
+    std::unique_ptr<mdp::publisher::IPublisherSource> source =
+        mdp::publisher::createPublisherSource(config);
     mdp::publisher::TcpPublisherClientOptions clientOptions;
     clientOptions.processorHost = config.network().processorHost;
     clientOptions.processorPort = config.network().processorPort;
@@ -231,7 +245,7 @@ int main(int argc, char** argv)
             ++burstIndex)
         {
             mdp::MarketDataEvent event;
-            if (!source.next(event))
+            if (!source->next(event))
             {
                 break;
             }
@@ -253,6 +267,15 @@ int main(int argc, char** argv)
         if (!batch.empty())
         {
             acceptedCount += client.sendBatch(batch);
+        }
+        else
+        {
+            const auto idleWait = source->idleWaitHint();
+            if (idleWait.count() > 0 &&
+                std::chrono::steady_clock::now() < stopAt)
+            {
+                std::this_thread::sleep_for(idleWait);
+            }
         }
 
         const auto now = std::chrono::steady_clock::now();

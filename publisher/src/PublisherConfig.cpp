@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 
 namespace mdp::publisher::config
@@ -55,6 +56,24 @@ namespace mdp::publisher::config
             }
 
             throw std::runtime_error("Invalid publisher boolean value: " + value);
+        }
+
+        std::vector<std::string> parseCommaSeparated(const std::string& value)
+        {
+            std::vector<std::string> items;
+            std::stringstream stream(value);
+            std::string item;
+
+            while (std::getline(stream, item, ','))
+            {
+                const std::string trimmed = trim(item);
+                if (!trimmed.empty())
+                {
+                    items.push_back(trimmed);
+                }
+            }
+
+            return items;
         }
     }
 
@@ -181,6 +200,82 @@ namespace mdp::publisher::config
                         "Unknown publisher source key on line " +
                         std::to_string(lineNumber) + ": " + key);
                 }
+            }
+            else if (currentSection == "ibkr")
+            {
+                if (key == "transport")
+                {
+                    config.m_ibkr.transport = toLower(value);
+                }
+                else if (key == "base_url")
+                {
+                    config.m_ibkr.baseUrl = value;
+                }
+                else if (key == "websocket_url")
+                {
+                    config.m_ibkr.websocketUrl = value;
+                }
+                else if (key == "symbols")
+                {
+                    config.m_ibkr.symbols = parseCommaSeparated(value);
+                }
+                else if (key == "security_type")
+                {
+                    config.m_ibkr.securityType = toLower(value);
+                    std::transform(
+                        config.m_ibkr.securityType.begin(),
+                        config.m_ibkr.securityType.end(),
+                        config.m_ibkr.securityType.begin(),
+                        [](unsigned char c)
+                        {
+                            return static_cast<char>(std::toupper(c));
+                        });
+                }
+                else if (key == "conids")
+                {
+                    config.m_ibkr.conids = parseCommaSeparated(value);
+                }
+                else if (key == "fields")
+                {
+                    config.m_ibkr.fields = parseCommaSeparated(value);
+                }
+                else if (key == "poll_interval_ms")
+                {
+                    config.m_ibkr.pollIntervalMs =
+                        static_cast<std::uint32_t>(std::stoul(value));
+                }
+                else if (key == "websocket_ping_interval_ms")
+                {
+                    config.m_ibkr.websocketPingIntervalMs =
+                        static_cast<std::uint32_t>(std::stoul(value));
+                }
+                else if (key == "event_queue_capacity")
+                {
+                    config.m_ibkr.eventQueueCapacity =
+                        static_cast<std::size_t>(std::stoull(value));
+                }
+                else if (key == "check_auth_on_startup")
+                {
+                    config.m_ibkr.checkAuthOnStartup = parseBool(value);
+                }
+                else if (key == "call_accounts_on_startup")
+                {
+                    config.m_ibkr.callAccountsOnStartup = parseBool(value);
+                }
+                else if (key == "allow_insecure_localhost_tls")
+                {
+                    config.m_ibkr.allowInsecureLocalhostTls = parseBool(value);
+                }
+                else
+                {
+                    throw std::runtime_error(
+                        "Unknown publisher ibkr key on line " +
+                        std::to_string(lineNumber) + ": " + key);
+                }
+            }
+            else if (currentSection == "ibkr.symbols")
+            {
+                config.m_ibkr.symbolsByConid[key] = value;
             }
             else if (currentSection == "export")
             {
