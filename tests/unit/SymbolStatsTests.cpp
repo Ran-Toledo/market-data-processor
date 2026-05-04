@@ -1,3 +1,4 @@
+#include "api/domain/MarketDataEvent.h"
 #include "processing/SymbolStats.h"
 
 #include <cassert>

@@ -1,6 +1,8 @@
 // SymbolStats.cpp
 #include "processing/SymbolStats.h"
 
+#include "api/domain/MarketDataEvent.h"
+
 namespace mdp::processing
 {
     void SymbolStats::record(const MarketDataEvent& event)

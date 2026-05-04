@@ -1,8 +1,15 @@
 #pragma once
 
-#include "api/domain/MarketDataEvent.h"
-#include "processing/RuleAlert.h"
-#include "processing/StateChange.h"
+namespace mdp
+{
+    struct MarketDataEvent;
+}
+
+namespace mdp::processing
+{
+    struct RuleAlert;
+    struct StateChange;
+}
 
 namespace mdp::output
 {

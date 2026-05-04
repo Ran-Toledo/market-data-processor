@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/AppConfig.h"
+#include "config/QueueTypes.h"
 #include "pipeline/QueueMetricsSnapshot.h"
 
 #include <atomic>

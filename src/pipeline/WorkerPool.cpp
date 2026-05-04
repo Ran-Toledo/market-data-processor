@@ -1,7 +1,9 @@
 #include "pipeline/WorkerPool.h"
 
+#include "config/AppConfig.h"
 #include "pipeline/BlockingBoundedEventQueue.h"
 #include "pipeline/LockFreeRingEventQueue.h"
+#include "processing/SymbolStats.h"
 #include "util/Clock.h"
 
 #include <functional>

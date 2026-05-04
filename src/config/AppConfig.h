@@ -1,6 +1,8 @@
 // AppConfig.h
 #pragma once
 
+#include "config/QueueTypes.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -8,18 +10,6 @@
 
 namespace mdp::config
 {
-    enum class QueueFullPolicy
-    {
-        BlockSubmitter,
-        DropIncoming
-    };
-
-    enum class QueueType
-    {
-        BlockingBounded,
-        LockFreeRing
-    };
-
     struct LoggingConfig
     {
         bool enableEventLogging{ true };

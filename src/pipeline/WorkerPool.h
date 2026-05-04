@@ -5,8 +5,8 @@
 #include "pipeline/IEventRouter.h"
 #include "pipeline/IEventQueue.h"
 #include "processing/EventProcessor.h"
-#include "processing/SymbolStateStore.h"
-#include "processing/SymbolStats.h"
+#include "processing/SymbolState.h"
+#include "processing/SymbolStatistics.h"
 
 #include <atomic>
 #include <cstddef>

@@ -1,25 +1,19 @@
 // SymbolStats.h
 #pragma once
 
-#include "api/domain/MarketDataEvent.h"
+#include "api/domain/Types.h"
+#include "processing/SymbolStatistics.h"
 
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <unordered_map>
 
+namespace mdp
+{
+    struct MarketDataEvent;
+}
+
 namespace mdp::processing
 {
-    struct SymbolStatistics
-    {
-        std::size_t eventCount = 0;
-        std::uint64_t totalVolume = 0;
-        double minPrice = 0.0;
-        double maxPrice = 0.0;
-        double lastPrice = 0.0;
-        double averagePrice = 0.0;
-    };
-
     class SymbolStats
     {
     public:

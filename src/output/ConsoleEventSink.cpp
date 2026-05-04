@@ -1,5 +1,9 @@
 #include "output/ConsoleEventSink.h"
 
+#include "api/domain/MarketDataEvent.h"
+#include "processing/RuleAlert.h"
+#include "processing/StateChange.h"
+
 #include <iostream>
 
 namespace mdp::output

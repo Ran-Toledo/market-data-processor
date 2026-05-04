@@ -1,6 +1,7 @@
 #pragma once
 
-#include "processing/SymbolStateStore.h"
+#include "api/domain/Types.h"
+#include "processing/SymbolState.h"
 
 #include <optional>
 

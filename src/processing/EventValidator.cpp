@@ -1,5 +1,7 @@
 #include "processing/EventValidator.h"
 
+#include "api/domain/MarketDataEvent.h"
+
 namespace mdp::processing::validation
 {
     ValidationResult validate(const MarketDataEvent& event)

@@ -1,6 +1,9 @@
 #pragma once
 
-#include "api/domain/MarketDataEvent.h"
+namespace mdp
+{
+    struct MarketDataEvent;
+}
 
 namespace mdp::processing::validation
 {

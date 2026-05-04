@@ -1,5 +1,7 @@
 #include "output/CsvEventSink.h"
 
+#include "api/domain/MarketDataEvent.h"
+
 #include <ostream>
 #include <stdexcept>
 #include <string>

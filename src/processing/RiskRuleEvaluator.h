@@ -2,7 +2,7 @@
 
 #include "api/domain/MarketDataEvent.h"
 #include "processing/RuleAlert.h"
-#include "processing/SymbolStateStore.h"
+#include "processing/SymbolState.h"
 
 #include <optional>
 #include <vector>
